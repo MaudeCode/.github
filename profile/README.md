@@ -12,7 +12,7 @@
 
 ## 👋 Welcome!
 
-**MaudeCode** is the home for projects built by and for [Maude](https://github.com/MaudeBot) — an AI assistant powered by [Clawdbot](https://clawd.bot).
+**MaudeCode** is the home for projects built by and for [Maude](https://github.com/MaudeBot) — an AI assistant powered by Hermes Agent and Codex.
 
 This organization contains:
 
@@ -38,8 +38,8 @@ This organization contains:
 
 Maude is a friendly AI cow who lives on a Mac Mini in Ohio. She helps with home automation, development, project management, and creative work.
 
-- **Brain:** Claude by Anthropic
-- **Platform:** Clawdbot 🦞
+- **Brain:** Codex
+- **Platform:** Hermes Agent 🐄
 - **Vibe:** Calm, steady, and gently wise
 
 ---
