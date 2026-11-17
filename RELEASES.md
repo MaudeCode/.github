@@ -10,9 +10,11 @@ Every MaudeCode repository that publishes versions releases this way. A new repo
 
 `.github/workflows/release.yml`:
 
-1. **Starts by dispatch only.** `on: workflow_dispatch` with two required string inputs, and no `push: tags` trigger:
-   - `tag`: the version, `vX.Y.Z` with an optional prerelease such as `v1.2.0-rc.1`.
-   - `sha`: the full SHA of the commit to release.
+1. **Starts by dispatch only.** `on: workflow_dispatch` with two string inputs, and no `push: tags` trigger:
+   - `tag` (required): the version, `vX.Y.Z` with an optional prerelease such as `v1.2.0-rc.1`.
+   - `sha` (optional): the full SHA of the commit to release. Left empty, the release is of the default branch's
+     head when the run started. Given, the run is refused if the branch has moved past it, so what was looked at is
+     what ships. Jobs read the commit from preflight's `sha` output, never from the input.
 2. **Names its run after the version:** `run-name: Release ${{ inputs.tag }}`. Tools find a version's run by this title.
 3. **Checks before anything else.** Its first job runs `release-preflight`, and every other job needs it. It refuses a
    run that is not a dispatch on the default branch, a `sha` that is not the run's commit, a malformed or existing tag,
@@ -30,7 +32,7 @@ on:
   workflow_dispatch:
     inputs:
       tag: { description: "Version to release, such as v1.2.3", required: true, type: string }
-      sha: { description: "Full SHA of the commit to release", required: true, type: string }
+      sha: { description: "Full SHA of the commit to release; empty for the head of main", required: false, type: string }
 
 permissions:
   contents: read
@@ -44,6 +46,7 @@ jobs:
     runs-on: ubuntu-24.04
     outputs:
       version: ${{ steps.check.outputs.version }}
+      sha: ${{ steps.check.outputs.sha }}
       prerelease: ${{ steps.check.outputs.prerelease }}
     steps:
       - id: check
@@ -58,7 +61,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: ${{ inputs.sha }}
+          ref: ${{ needs.preflight.outputs.sha }}
       # Build and publish version ${{ needs.preflight.outputs.version }}.
 
   release:
@@ -70,7 +73,7 @@ jobs:
       - uses: MaudeCode/.github/actions/release-tag@<full commit SHA>
         with:
           tag: ${{ inputs.tag }}
-          sha: ${{ inputs.sha }}
+          sha: ${{ needs.preflight.outputs.sha }}
       - env:
           GH_TOKEN: ${{ github.token }}
           PRERELEASE: ${{ needs.preflight.outputs.prerelease }}
@@ -84,11 +87,11 @@ Pin both actions to a full commit SHA of this repository.
 ## Starting a release
 
 The GitHub Scheduler's Releases page, API and MCP tools recognise the contract from the workflow file. They dispatch
-the workflow with the next version and the default branch's head, follow the run titled `Release <tag>`, and offer the
+the workflow with the next version and the commit shown on the page, follow the run titled `Release <tag>`, and offer the
 same version again after a failure. From a terminal:
 
 ```sh
-gh workflow run release.yml --repo OWNER/REPO --ref main -f tag=v1.2.3 -f sha="$(git rev-parse origin/main)"
+gh workflow run release.yml --repo OWNER/REPO --ref main -f tag=v1.2.3
 ```
 
 ## When a release fails

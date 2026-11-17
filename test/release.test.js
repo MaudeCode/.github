@@ -11,6 +11,7 @@ test("a release is a dispatch on the default branch, of the expected commit, und
   assert.equal(refusal(release), null);
   assert.equal(refusal({ ...release, tags: [] }), null);
   assert.equal(refusal({ ...release, tag: "v1.3.0-rc.1" }), null);
+  assert.equal(refusal({ ...release, sha: "" }), null, "no sha releases the commit the run is on");
   for (const [change, reason] of [
     [{ event: "push" }, /started by dispatching/],
     [{ ref: "refs/heads/feature" }, /runs on main/],
