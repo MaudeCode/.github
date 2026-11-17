@@ -5,8 +5,8 @@ inputs:
     description: The version to release, vX.Y.Z with an optional prerelease.
     required: true
   sha:
-    description: The full commit SHA to release. It must be the commit this run is on.
-    required: true
+    description: The full commit SHA to release. It must be the commit this run is on. Empty releases that commit.
+    default: ""
   token:
     description: Token that can read the repository.
     default: ${{ github.token }}
@@ -16,7 +16,7 @@ outputs:
   version:
     description: The version without its v, such as 1.2.3.
   sha:
-    description: The commit to release.
+    description: The commit to release. Use this, not the input, which may be empty.
   prerelease:
     description: "true for a prerelease such as v1.2.0-rc.1, otherwise false."
 runs:
