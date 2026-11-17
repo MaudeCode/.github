@@ -24,9 +24,10 @@ copy the workflow below, name its CI's gate job in `checks`, and release its fir
    `sha` whose workflow files differ from the default branch's: GitHub does not let a workflow's token tag such a
    commit, so release a newer one.
 4. **Verifies by reuse or by running, and waits on nothing else.** The release names the checks it needs in
-   preflight's `checks` input, one `workflow.yml: Job name` a line. A check whose job already succeeded in that
-   workflow's push run on the commit is reused; preflight's `verified` output is `true` when all of them did, and
-   `checks` says which. The release runs the others itself, in its own jobs. It never waits for another workflow's run
+   preflight's `checks` input, one `workflow.yml: Job name` a line. A job name ending in `*` names a suite: every
+   job whose name starts with what comes before it, such as `ci.yml: web / *`. A check whose job, or every job of
+   its suite, already succeeded in that workflow's push run on the commit is reused; preflight's `verified` output is
+   `true` when all of them did, `checks` says which, and `runs` links to the run each was read from. The release runs the others itself, in its own jobs. It never waits for another workflow's run
    to finish, and a failure in a job the release does not name does not hold it up. Pull request CI is not changed for
    a release's sake.
 5. **Uses no credential of its own.** Every ref and tag is written with the workflow's `github.token`. A release
@@ -136,7 +137,7 @@ gh workflow run release.yml --repo OWNER/REPO --ref main -f tag=v1.2.3
 
 - `actions/release-preflight`: inputs `tag`, `sha`, optional `checks`; outputs `tag`, `version` (without the `v`),
   `sha`, `prerelease` (`true` for a version such as `v1.2.0-rc.1`; pass it on, since GitHub does not infer a prerelease
-  from the tag), `verified` and `checks`. Looking up checks needs `actions: read`.
+  from the tag), `verified`, `checks` and `runs`. Looking up checks needs `actions: read`.
 - `actions/release-tag`: inputs `tag`, `sha`, optional `message`. Needs `contents: write`. Creating the tag again at the
   same commit succeeds; at another commit it fails.
 

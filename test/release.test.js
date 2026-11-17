@@ -117,7 +117,7 @@ test("a check counts as passed only when its job succeeded in the workflow's pus
     if (listed) {
       const workflow = decodeURIComponent(listed[1]);
       if (!(workflow in runs)) return { status: 404, data: { message: "Not Found" } };
-      return { status: 200, data: { workflow_runs: listed[2] === SHA && runs[workflow] ? [{ id: workflow }] : [] } };
+      return { status: 200, data: { workflow_runs: listed[2] === SHA && runs[workflow] ? [{ id: workflow, html_url: `https://github.test/runs/${workflow}` }] : [] } };
     }
     const jobs = /^\/actions\/runs\/([^/]+)\/jobs\?filter=latest&per_page=100(&page=2)?$/.exec(path);
     if (jobs) {
@@ -130,9 +130,21 @@ test("a check counts as passed only when its job succeeded in the workflow's pus
   assert.deepEqual(checks, [{ workflow: "ci.yml", job: "Checks" }, { workflow: "ci.yml", job: "Browser (1/4)" }, { workflow: "verify.yml", job: "Tests" }]);
   // A job that passed counts though a sibling failed; one still running, skipped or absent does not, nor a workflow with no run.
   const api = repository({ "ci.yml": { "Docker (arm64)": "failure", "Browser (1/4)": null, Checks: "success" }, "verify.yml": null });
-  assert.deepEqual(await passedChecks(api, { sha: SHA, checks }), { "ci.yml: Checks": true, "ci.yml: Browser (1/4)": false, "verify.yml: Tests": false });
-  assert.deepEqual(await passedChecks(api, { sha: OTHER, checks: checks.slice(0, 1) }), { "ci.yml: Checks": false }, "another commit's run is not this one's");
-  assert.deepEqual(await passedChecks(api, { sha: SHA, checks: [] }), {});
+  assert.deepEqual(await passedChecks(api, { sha: SHA, checks }), {
+    passed: { "ci.yml: Checks": true, "ci.yml: Browser (1/4)": false, "verify.yml: Tests": false },
+    // Where each was read from, for a release to link to; a workflow with no run on the commit has none.
+    runs: { "ci.yml: Checks": "https://github.test/runs/ci.yml", "ci.yml: Browser (1/4)": "https://github.test/runs/ci.yml" },
+  });
+  assert.deepEqual(await passedChecks(api, { sha: OTHER, checks: checks.slice(0, 1) }), { passed: { "ci.yml: Checks": false }, runs: {} }, "another commit's run is not this one's");
+  assert.deepEqual(await passedChecks(api, { sha: SHA, checks: [] }), { passed: {}, runs: {} });
+  // A name ending in * is a suite: every job that starts with it, at least one, all passed.
+  const suites = repository({ "ci.yml": { "web / server (1/2)": "success", "web / server (2/2)": "success", "web / e2e (1/2)": "success", "web / e2e (2/2)": "skipped", "relay / check": "success" } });
+  const suite = (job) => passedChecks(suites, { sha: SHA, checks: [{ workflow: "ci.yml", job }] }).then(({ passed }) => Object.values(passed)[0]);
+  assert.equal(await suite("web / server *"), true);
+  assert.equal(await suite("web / e2e *"), false, "one skipped job");
+  assert.equal(await suite("web / *"), false, "the whole of web includes the skipped one");
+  assert.equal(await suite("app / *"), false, "a suite with no jobs has not passed");
+  assert.equal(await suite("relay / *"), true);
   await assert.rejects(passedChecks(api, { sha: SHA, checks: [{ workflow: "missing.yml", job: "Checks" }] }), /missing\.yml is not a workflow/);
   assert.throws(() => parseChecks("Checks"), /not a check such as/);
 });
