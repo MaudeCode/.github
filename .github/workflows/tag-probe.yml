@@ -16,11 +16,9 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - name: Through the API
+      - name: Through a release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh api -X POST "repos/$GITHUB_REPOSITORY/git/refs" -f ref=refs/tags/probe-api2 -f sha="${{ inputs.sha }}" --jq .ref || echo "API REFUSED"
-      - name: Through git push
-        run: |
-          git push origin "${{ inputs.sha }}:refs/tags/probe-push2" 2>&1 || echo "PUSH REFUSED"
+          gh release create probe-release --repo "$GITHUB_REPOSITORY" --target "${{ inputs.sha }}" --title probe --notes probe --draft=false 2>&1 || echo "RELEASE REFUSED"
+          gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/probe-release" --jq '"tag at \(.object.sha)"' || true
