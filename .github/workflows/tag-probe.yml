@@ -1,6 +1,6 @@
 name: Tag probe
 
-# Temporary: can a run tag its own commit with a deploy key after main's workflow files have changed?
+# Temporary (main changed while the run slept): can a run tag its own commit with a deploy key after main's workflow files have changed?
 on:
   workflow_dispatch:
 
