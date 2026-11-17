@@ -1,0 +1,49 @@
+name: iOS publish
+description: Export an archive to an IPA, verify it, and when asked upload it to TestFlight and wait until Apple has processed it.
+inputs:
+  archive:
+    description: Path of the .xcarchive to export. Give this or ipa.
+    default: ""
+  ipa:
+    description: Path of an IPA exported earlier, to verify and upload instead of exporting.
+    default: ""
+  export-options:
+    description: Path of the ExportOptions.plist from ios-signing. Needed with archive.
+    default: ""
+  bundle-id:
+    description: The app's bundle identifier.
+    required: true
+  version:
+    description: The marketing version the IPA must carry.
+    required: true
+  build-number:
+    description: The build number the IPA must carry, from ios-build-number.
+    required: true
+  commit:
+    description: The full commit SHA the build belongs to, from ios-build-number. Needed with upload.
+    default: ""
+  upload:
+    description: "true uploads to TestFlight; anything else stops after verification."
+    default: "false"
+  whats-new:
+    description: Optional en-US "What to Test" text for the build.
+    default: ""
+  app-store-connect-key-id:
+    description: The App Store Connect API key's identifier. Needed with upload.
+    default: ""
+  app-store-connect-issuer-id:
+    description: The App Store Connect API key's issuer identifier. Needed with upload.
+    default: ""
+  app-store-connect-private-key:
+    description: The App Store Connect API key (.p8 contents). Needed with upload.
+    default: ""
+outputs:
+  ipa:
+    description: Path of the verified IPA.
+  dsyms:
+    description: Path of the archive's dSYMs folder; empty when given an IPA.
+  build-id:
+    description: The App Store Connect build's identifier after an upload; empty otherwise.
+runs:
+  using: node24
+  main: index.js

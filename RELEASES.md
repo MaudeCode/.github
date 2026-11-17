@@ -109,3 +109,6 @@ gh workflow run release.yml --repo OWNER/REPO --ref main -f tag=v1.2.3
   same commit succeeds; at another commit it fails.
 
 Both run on the runner's own Node and depend on nothing else. `node --test` runs their tests.
+
+An iOS app's publishing job signs, numbers and uploads to TestFlight through `ios-signing`, `ios-build-number` and
+`ios-publish`; see [IOS.md](IOS.md). Re-running it for the same version and commit uploads nothing twice.

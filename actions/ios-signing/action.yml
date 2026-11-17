@@ -1,0 +1,39 @@
+name: iOS signing
+description: Sign an iOS app for the App Store in this job, with checked App Store profiles and the export options. Its post step removes everything again.
+inputs:
+  certificate-p12-base64:
+    description: The Apple Distribution certificate and its private key, a .p12 in base64.
+    required: true
+  certificate-password:
+    description: The .p12's password.
+    required: true
+  app-store-connect-key-id:
+    description: The App Store Connect API key's identifier.
+    required: true
+  app-store-connect-issuer-id:
+    description: The App Store Connect API key's issuer identifier.
+    required: true
+  app-store-connect-private-key:
+    description: The App Store Connect API key (.p8 contents). Literal \n in it reads as a newline.
+    required: true
+  bundle-ids:
+    description: The bundle identifier of the app and of each extension, one per line or separated by commas.
+    required: true
+  internal-testing-only:
+    description: "true makes the exported build available to internal TestFlight testers only."
+    default: "false"
+outputs:
+  team-id:
+    description: The team identifier, read from the certificate.
+  profiles:
+    description: JSON object from each bundle identifier to the name of its App Store profile.
+  export-options:
+    description: Path of the ExportOptions.plist for ios-publish.
+  api-key-path:
+    description: Path of the App Store Connect key file (AuthKey_<key id>.p8).
+  keychain:
+    description: Path of the job's signing keychain, first on the search list.
+runs:
+  using: node24
+  main: index.js
+  post: post.js
