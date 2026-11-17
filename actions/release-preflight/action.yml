@@ -1,0 +1,22 @@
+name: Release preflight
+description: Refuse a release that is not a dispatch on the default branch, of the expected commit, under an unused later version.
+inputs:
+  tag:
+    description: The version to release, vX.Y.Z with an optional prerelease.
+    required: true
+  sha:
+    description: The full commit SHA to release. It must be the commit this run is on.
+    required: true
+  token:
+    description: Token that can read the repository.
+    default: ${{ github.token }}
+outputs:
+  tag:
+    description: The version tag, such as v1.2.3.
+  version:
+    description: The version without its v, such as 1.2.3.
+  sha:
+    description: The commit to release.
+runs:
+  using: node24
+  main: index.js

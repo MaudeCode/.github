@@ -1,0 +1,18 @@
+name: Release tag
+description: Create the annotated version tag that marks a finished release. Use it only after everything has published.
+inputs:
+  tag:
+    description: The version tag to create, such as v1.2.3.
+    required: true
+  sha:
+    description: The full commit SHA that was released.
+    required: true
+  message:
+    description: The tag's message. Defaults to "<repository name> <version>".
+    default: ""
+  token:
+    description: Token with contents write on the repository.
+    default: ${{ github.token }}
+runs:
+  using: node24
+  main: index.js
