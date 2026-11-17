@@ -1,6 +1,6 @@
 name: Tag probe
 
-# Temporary: can a run tag its own commit after main's workflow files have changed underneath it?
+# Temporary (main changed while the run slept): can a run tag its own commit after main's workflow files have changed underneath it?
 on:
   workflow_dispatch:
 
