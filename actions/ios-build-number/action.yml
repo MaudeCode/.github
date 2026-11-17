@@ -1,0 +1,31 @@
+name: iOS build number
+description: The build number for a version, from App Store Connect. The same version and commit asked again gets the number it already uploaded.
+inputs:
+  bundle-id:
+    description: The app's bundle identifier.
+    required: true
+  version:
+    description: The marketing version, such as 1.2.3.
+    required: true
+  commit:
+    description: The full SHA of the commit being built. Empty for the checked-out HEAD.
+    default: ""
+  app-store-connect-key-id:
+    description: The App Store Connect API key's identifier.
+    required: true
+  app-store-connect-issuer-id:
+    description: The App Store Connect API key's issuer identifier.
+    required: true
+  app-store-connect-private-key:
+    description: The App Store Connect API key (.p8 contents).
+    required: true
+outputs:
+  build-number:
+    description: The build number to archive with.
+  uploaded:
+    description: "true when this commit already uploaded this version under that number."
+  commit:
+    description: The full commit SHA the number belongs to; pass it to ios-publish.
+runs:
+  using: node24
+  main: index.js
