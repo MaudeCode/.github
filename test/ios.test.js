@@ -34,12 +34,13 @@ const OTHER = "d".repeat(40);
 const temporary = () => fs.mkdtempSync(path.join(os.tmpdir(), "ios-test-"));
 
 /** A decoded provisioning profile as `security cms -D` prints it. */
-function profileXml({ name = "App Store", team = TEAM, appId = `${TEAM}.${APP}`, expires = "2027-06-01T00:00:00Z", certificates = [CERTIFICATE], uuid = "UUID-1", extra = "" } = {}) {
+function profileXml({ name = "App Store", team = TEAM, prefix = team, appId = `${prefix}.${APP}`, expires = "2027-06-01T00:00:00Z", certificates = [CERTIFICATE], uuid = "UUID-1", extra = "" } = {}) {
   return `<?xml version="1.0" encoding="UTF-8"?>
 <plist version="1.0"><dict>
   <key>Name</key><string>${name}</string>
   <key>UUID</key><string>${uuid}</string>
   <key>TeamIdentifier</key><array><string>${team}</string></array>
+  <key>ApplicationIdentifierPrefix</key><array><string>${prefix}</string></array>
   <key>ExpirationDate</key><date>${expires}</date>
   <key>DeveloperCertificates</key><array>${certificates.map((der) => `<data>\n${der.toString("base64")}\n</data>`).join("")}</array>
   <key>Entitlements</key><dict><key>application-identifier</key><string>${appId}</string>${extra}</dict>
@@ -94,6 +95,7 @@ test("a property list reads back what the export options wrote", () => {
 test("a profile signs only its own bundle identifier, for the team, with this certificate, before it expires", () => {
   const check = (options) => ios.profileProblem(ios.parsePlist(profileXml(options)), { bundleId: APP, team: TEAM, certificate: CERTIFICATE, now: NOW });
   assert.equal(check(), null);
+  assert.equal(check({ prefix: "LEGACY1234" }), null, "an App ID prefix other than the team");
   assert.match(check({ appId: `${TEAM}.dev.example.other` }), /is for TEAM1234AB\.dev\.example\.other, not TEAM1234AB\.dev\.example\.app/);
   assert.match(check({ team: "OTHERTEAM1", appId: `OTHERTEAM1.${APP}` }), /belongs to team OTHERTEAM1, not TEAM1234AB/);
   assert.match(check({ expires: "2026-11-01T00:00:00Z" }), /expired on 2026-11-01/);
@@ -181,7 +183,9 @@ function testflight({ builds = [], uploads = [], files = {}, versions = [], proc
     "GET /v1/apps": () => [{ id: "app", attributes: { bundleId: APP } }],
     "GET /v1/apps/app/appStoreVersions": () => store.versions.map(([versionString, appStoreState]) => ({ attributes: { versionString, appStoreState } })),
     "GET /v1/apps/app/buildUploads": (query) => store.uploads.filter((row) => matches(row, query)),
-    "GET /v1/builds": (query) => store.builds.filter((row) => row.marketing === query["filter[preReleaseVersion.version]"] && (!query["filter[version]"] || row.attributes.version === query["filter[version]"])),
+    "GET /v1/builds": (query) => store.builds.filter((row) => row.marketing === query["filter[preReleaseVersion.version]"]
+      && (row.platform ?? "IOS") === (query["filter[preReleaseVersion.platform]"] ?? row.platform ?? "IOS")
+      && (!query["filter[version]"] || row.attributes.version === query["filter[version]"])),
     "POST /v1/buildUploads": (_, data) => {
       const upload = { id: `upload-${store.uploads.length}`, attributes: { ...data.attributes, state: { state: "AWAITING_UPLOAD" } } };
       store.uploads.push(upload);
@@ -254,7 +258,7 @@ function ipaRunner({ bundles, codesign = true }) {
         const bundle = path.join(into, "Payload", where);
         fs.mkdirSync(bundle, { recursive: true });
         fs.writeFileSync(path.join(bundle, "Info.plist"), `<plist><dict><key>CFBundleIdentifier</key><string>${id}</string><key>CFBundleShortVersionString</key><string>${version}</string><key>CFBundleVersion</key><string>${number}</string></dict></plist>`);
-        if (profile) fs.writeFileSync(path.join(bundle, "embedded.mobileprovision"), profileXml({ appId: `${TEAM}.${id}`, ...profile }));
+        if (profile) fs.writeFileSync(path.join(bundle, "embedded.mobileprovision"), profileXml({ appId: `${profile.prefix ?? TEAM}.${id}`, ...profile }));
       }
       return "";
     },
@@ -266,6 +270,7 @@ test("an IPA is verified: identifiers, version and build number in every bundle,
   const share = "App.app/PlugIns/Share.appex";
   const check = (bundles, options) => ios.verifyIpa(ipaRunner({ bundles, ...options }), { ipa: "/tmp/App.ipa", bundleId: APP, version: "1.2.0", buildNumber: "7", directory: path.join(temporary(), "ipa") });
   check({ "App.app": { id: APP }, [share]: { id: `${APP}.share` } });
+  check({ "App.app": { id: APP, profile: { prefix: "LEGACY1234" } } });
   for (const [bundles, options, problem] of [
     [{ "App.app": { id: "dev.example.wrong" } }, {}, /App\.app has bundle identifier dev\.example\.wrong, expected dev\.example\.app/],
     [{ "App.app": { id: APP }, [share]: { id: "dev.other.share" } }, {}, /Share\.appex has bundle identifier dev\.other\.share/],
@@ -299,6 +304,10 @@ test("uploading sends the IPA once, waits for Apple, and a run again for the sam
   assert.deepEqual(apple.writes, ["PATCH /v1/betaBuildLocalizations/en"], "nothing is uploaded twice");
   assert.deepEqual(again.calls, []);
   assert.deepEqual(apple.store.localizations.map((row) => row.attributes), [{ locale: "en-US", whatsNew: "Fixes, again" }]);
+
+  // The same version and number on another platform is not this build.
+  const mac = testflight({ builds: [{ ...build("1.2.0", "7"), platform: "MAC_OS" }] });
+  assert.deepEqual(await send(mac, runner(), ""), { buildId: "build-new", uploaded: true });
 
   // A build another tool uploaded, with no upload record behind it, counts the same.
   const elsewhere = testflight({ builds: [build("1.2.0", "7")] });
