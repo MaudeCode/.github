@@ -22,6 +22,9 @@ inputs:
   commit:
     description: The full commit SHA the build belongs to, from ios-build-number. Needed with upload.
     default: ""
+  variant:
+    description: Keeps apart builds of one commit that differ, such as a Nightly and a production build. Lowercase letters, digits and hyphens; the same as for ios-build-number.
+    default: ""
   upload:
     description: "true uploads to TestFlight; anything else stops after verification."
     default: "false"
