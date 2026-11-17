@@ -1,7 +1,7 @@
 "use strict";
 const assert = require("node:assert/strict");
 const { test } = require("node:test");
-const { compareVersions, createTag, earlierCommitRefusal, parseVersion, refusal, versionTags } = require("../lib/release.js");
+const { compareVersions, createTag, earlierCommitRefusal, parseChecks, parseVersion, passedChecks, refusal, versionTags } = require("../lib/release.js");
 
 const SHA = "a".repeat(40);
 const OTHER = "b".repeat(40);
@@ -108,4 +108,31 @@ test("an earlier commit is released when it is on the default branch after the l
   assert.match(await earlierCommitRefusal(history([RELEASED, HEAD, PICKED], same), picked), /bbbbbbb is not a commit on main/, "a commit ahead of the branch");
   assert.match(await earlierCommitRefusal(history([PICKED, RELEASED, HEAD], same), picked), /does not come after v1\.2\.1/);
   assert.match(await earlierCommitRefusal(history([RELEASED, PICKED, HEAD], { [PICKED]: "w1", [HEAD]: "w2" }), picked), /workflow file changed between bbbbbbb and main/);
+});
+
+test("a check counts as passed only when its job succeeded in the workflow's push run on the commit", async () => {
+  /** Each workflow's newest push run on SHA, as its jobs and their conclusions; none for a workflow that has not run. */
+  const repository = (runs) => async (method, path) => {
+    const listed = /^\/actions\/workflows\/([^/]+)\/runs\?head_sha=(\w+)&event=push&per_page=1$/.exec(path);
+    if (listed) {
+      const workflow = decodeURIComponent(listed[1]);
+      if (!(workflow in runs)) return { status: 404, data: { message: "Not Found" } };
+      return { status: 200, data: { workflow_runs: listed[2] === SHA && runs[workflow] ? [{ id: workflow }] : [] } };
+    }
+    const jobs = /^\/actions\/runs\/([^/]+)\/jobs\?filter=latest&per_page=100(&page=2)?$/.exec(path);
+    if (jobs) {
+      const all = Object.entries(runs[jobs[1]]).map(([name, conclusion]) => ({ name, conclusion }));
+      return jobs[2] ? { status: 200, data: { jobs: all.slice(1) } } : { status: 200, data: { jobs: all.slice(0, 1) }, next: all.length > 1 ? `${path}&page=2` : undefined };
+    }
+    throw new Error(`unexpected ${method} ${path}`);
+  };
+  const checks = parseChecks("ci.yml: Checks\n  ci.yml: Browser (1/4)\n\nverify.yml: Tests\n");
+  assert.deepEqual(checks, [{ workflow: "ci.yml", job: "Checks" }, { workflow: "ci.yml", job: "Browser (1/4)" }, { workflow: "verify.yml", job: "Tests" }]);
+  // A job that passed counts though a sibling failed; one still running, skipped or absent does not, nor a workflow with no run.
+  const api = repository({ "ci.yml": { "Docker (arm64)": "failure", "Browser (1/4)": null, Checks: "success" }, "verify.yml": null });
+  assert.deepEqual(await passedChecks(api, { sha: SHA, checks }), { "ci.yml: Checks": true, "ci.yml: Browser (1/4)": false, "verify.yml: Tests": false });
+  assert.deepEqual(await passedChecks(api, { sha: OTHER, checks: checks.slice(0, 1) }), { "ci.yml: Checks": false }, "another commit's run is not this one's");
+  assert.deepEqual(await passedChecks(api, { sha: SHA, checks: [] }), {});
+  await assert.rejects(passedChecks(api, { sha: SHA, checks: [{ workflow: "missing.yml", job: "Checks" }] }), /missing\.yml is not a workflow/);
+  assert.throws(() => parseChecks("Checks"), /not a check such as/);
 });

@@ -7,6 +7,11 @@ inputs:
   sha:
     description: The full commit SHA to release, on the default branch after the last release. Empty releases the commit this run is on.
     default: ""
+  checks:
+    description: >-
+      The checks this release needs, one "workflow.yml: Job name" a line. Each is looked up in that workflow's
+      push run on the commit. Needs actions: read. Empty looks nothing up.
+    default: ""
   token:
     description: Token that can read the repository.
     default: ${{ github.token }}
@@ -17,6 +22,10 @@ outputs:
     description: The version without its v, such as 1.2.3.
   sha:
     description: The commit to release. Use this, not the input, which may be empty.
+  verified:
+    description: "true when every check in `checks` already passed on the commit, so the release need not run them; otherwise false."
+  checks:
+    description: 'Each check and whether it already passed, as JSON such as {"ci.yml: Checks": true}.'
   prerelease:
     description: "true for a prerelease such as v1.2.0-rc.1, otherwise false."
 runs:
