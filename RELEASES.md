@@ -12,13 +12,16 @@ Every MaudeCode repository that publishes versions releases this way. A new repo
 
 1. **Starts by dispatch only.** `on: workflow_dispatch` with two string inputs, and no `push: tags` trigger:
    - `tag` (required): the version, `vX.Y.Z` with an optional prerelease such as `v1.2.0-rc.1`.
-   - `sha` (optional): the full SHA of the commit to release. Left empty, the release is of the default branch's
-     head when the run started. Given, the run is refused if the branch has moved past it, so what was looked at is
-     what ships. Jobs read the commit from preflight's `sha` output, never from the input.
+   - `sha` (optional): the full SHA of the commit to release: any commit on the default branch after the last
+     release. Left empty, the release is of the default branch's head when the run started. The run stays on that
+     commit whatever is merged afterwards. Jobs read the commit from preflight's `sha` output, never from the input
+     or `github.sha`, which is the branch's head.
 2. **Names its run after the version:** `run-name: Release ${{ inputs.tag }}`. Tools find a version's run by this title.
 3. **Checks before anything else.** Its first job runs `release-preflight`, and every other job needs it. It refuses a
-   run that is not a dispatch on the default branch, a `sha` that is not the run's commit, a malformed or existing tag,
-   and a version that does not come after every existing `vX.Y.Z` tag.
+   run that is not a dispatch on the default branch, a malformed or existing tag, a version that does not come after
+   every existing `vX.Y.Z` tag, and a `sha` that is not on the default branch after the last release. It also refuses a
+   `sha` whose workflow files differ from the default branch's: GitHub does not let a workflow's token tag such a
+   commit, so release a newer one.
 4. **Publishes steps that can run again.** Re-running failed jobs, or dispatching the same version again from the same
    commit, must not fail on what an earlier attempt already published.
 5. **Tags last.** One final job, needing every publishing job, runs `release-tag` and then creates the GitHub release.
@@ -98,6 +101,8 @@ gh workflow run release.yml --repo OWNER/REPO --ref main -f tag=v1.2.3
 
 - **Before anything published** (a failing test or build): fix it, then release the same version from the new commit.
 - **A flaky step:** re-run the failed jobs of the same run.
+- **The tag step is refused (HTTP 403):** a workflow file changed on the default branch while the release ran.
+  Everything has published; the step prints the `git tag` and `git push` commands to finish it by hand.
 - **After something published under that version from a commit that has since changed:** registries do not take a
   version twice, so release the next version.
 

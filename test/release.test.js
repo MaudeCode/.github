@@ -1,17 +1,18 @@
 "use strict";
 const assert = require("node:assert/strict");
 const { test } = require("node:test");
-const { compareVersions, createTag, parseVersion, refusal, versionTags } = require("../lib/release.js");
+const { compareVersions, createTag, earlierCommitRefusal, parseVersion, refusal, versionTags } = require("../lib/release.js");
 
 const SHA = "a".repeat(40);
 const OTHER = "b".repeat(40);
 const release = { event: "workflow_dispatch", ref: "refs/heads/main", defaultBranch: "main", runSha: SHA, sha: SHA, tag: "v1.3.0", tags: ["v1.2.0", "v1.2.1", "nightly", "v9"] };
 
-test("a release is a dispatch on the default branch, of the expected commit, under an unused later version", () => {
+test("a release is a dispatch on the default branch, under an unused later version", () => {
   assert.equal(refusal(release), null);
   assert.equal(refusal({ ...release, tags: [] }), null);
   assert.equal(refusal({ ...release, tag: "v1.3.0-rc.1" }), null);
   assert.equal(refusal({ ...release, sha: "" }), null, "no sha releases the commit the run is on");
+  assert.equal(refusal({ ...release, sha: OTHER }), null, "a commit other than the run's is checked by earlierCommitRefusal");
   for (const [change, reason] of [
     [{ event: "push" }, /started by dispatching/],
     [{ ref: "refs/heads/feature" }, /runs on main/],
@@ -20,7 +21,6 @@ test("a release is a dispatch on the default branch, of the expected commit, und
     [{ tag: "v1.3" }, /not a version tag/],
     [{ tag: "v1.3.0+build" }, /not a version tag/],
     [{ sha: "abc123" }, /full commit SHA/],
-    [{ sha: OTHER }, /main is at aaaaaaa, not the bbbbbbb/],
     [{ tag: "v1.2.1" }, /already exists/],
     [{ tag: "v1.2.0-rc.1" }, /does not come after v1\.2\.1/],
     [{ tag: "v1.1.9" }, /does not come after v1\.2\.1/],
@@ -83,4 +83,29 @@ test("the tag is created once at the released commit; a re-run succeeds and anot
   // A lightweight tag someone pushed by hand counts the same way.
   const manual = repository({ "v2.0.0": { type: "commit", sha: SHA } });
   assert.equal(await createTag(manual.api, { tag: "v2.0.0", sha: SHA, message: "demo 2.0.0" }), "exists");
+});
+
+test("an earlier commit is released when it is on the default branch after the last release with the same workflow files", async () => {
+  const [HEAD, PICKED, RELEASED] = [SHA, OTHER, "c".repeat(40)];
+  /** A history RELEASED < PICKED < HEAD, each commit with the id of its workflows directory. */
+  const history = (order, workflows) => async (method, path) => {
+    const compare = /^\/compare\/(\w+)\.\.\.(\w+)$/.exec(path);
+    if (compare) {
+      const [base, head] = [order.indexOf(compare[1]), order.indexOf(compare[2])];
+      if (base < 0 || head < 0) return { status: 404, data: { message: "Not Found" } };
+      return { status: 200, data: { status: base < head ? "ahead" : base === head ? "identical" : "behind" } };
+    }
+    if (path === "/git/ref/tags/v1.2.1") return { status: 200, data: { object: { type: "commit", sha: RELEASED } } };
+    const contents = /^\/contents\/\.github\?ref=(\w+)$/.exec(path);
+    if (contents) return { status: 200, data: [{ name: "workflows", sha: workflows[contents[1]] }] };
+    throw new Error(`unexpected ${method} ${path}`);
+  };
+  const picked = { sha: PICKED, runSha: HEAD, defaultBranch: "main", latest: "v1.2.1" };
+  const same = { [PICKED]: "w1", [HEAD]: "w1" };
+  assert.equal(await earlierCommitRefusal(history([RELEASED, PICKED, HEAD], same), picked), null);
+  assert.equal(await earlierCommitRefusal(history([PICKED, HEAD], same), { ...picked, latest: undefined }), null, "a first release");
+  assert.match(await earlierCommitRefusal(history([RELEASED, HEAD], same), picked), /bbbbbbb is not a commit on main/);
+  assert.match(await earlierCommitRefusal(history([RELEASED, HEAD, PICKED], same), picked), /bbbbbbb is not a commit on main/, "a commit ahead of the branch");
+  assert.match(await earlierCommitRefusal(history([PICKED, RELEASED, HEAD], same), picked), /does not come after v1\.2\.1/);
+  assert.match(await earlierCommitRefusal(history([RELEASED, PICKED, HEAD], { [PICKED]: "w1", [HEAD]: "w2" }), picked), /workflow file changed between bbbbbbb and main/);
 });
