@@ -1,6 +1,6 @@
 name: Tag probe
 
-# Temporary: does the job's own token create a tag at a commit whose workflow files differ from main's?
+# Temporary (changed after the source): does the job's own token create a tag at a commit whose workflow files differ from main's?
 on:
   workflow_dispatch:
     inputs:
@@ -20,7 +20,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh api -X POST "repos/$GITHUB_REPOSITORY/git/refs" -f ref=refs/tags/probe-api -f sha="${{ inputs.sha }}" --jq .ref || echo "API REFUSED"
+          gh api -X POST "repos/$GITHUB_REPOSITORY/git/refs" -f ref=refs/tags/probe-api2 -f sha="${{ inputs.sha }}" --jq .ref || echo "API REFUSED"
       - name: Through git push
         run: |
-          git push origin "${{ inputs.sha }}:refs/tags/probe-push" 2>&1 || echo "PUSH REFUSED"
+          git push origin "${{ inputs.sha }}:refs/tags/probe-push2" 2>&1 || echo "PUSH REFUSED"
