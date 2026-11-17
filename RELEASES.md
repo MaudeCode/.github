@@ -4,7 +4,8 @@ A version tag means the release shipped. A release is started by dispatching the
 default branch; the workflow publishes, and its last job creates the `vX.Y.Z` tag. A release that fails leaves no tag,
 so the same version is released again once the cause is fixed.
 
-Every MaudeCode repository that publishes versions releases this way. A new repository adopts it from the start.
+Every MaudeCode repository that publishes versions releases this way. A new repository adopts it from the start:
+copy the workflow below, name its CI's gate job in `checks`, and release its first version through it.
 
 ## The contract
 
@@ -22,9 +23,17 @@ Every MaudeCode repository that publishes versions releases this way. A new repo
    every existing `vX.Y.Z` tag, and a `sha` that is not on the default branch after the last release. It also refuses a
    `sha` whose workflow files differ from the default branch's: GitHub does not let a workflow's token tag such a
    commit, so release a newer one.
-4. **Publishes steps that can run again.** Re-running failed jobs, or dispatching the same version again from the same
+4. **Verifies by reuse or by running, and waits on nothing else.** The release names the checks it needs in
+   preflight's `checks` input, one `workflow.yml: Job name` a line. A check whose job already succeeded in that
+   workflow's push run on the commit is reused; preflight's `verified` output is `true` when all of them did, and
+   `checks` says which. The release runs the others itself, in its own jobs. It never waits for another workflow's run
+   to finish, and a failure in a job the release does not name does not hold it up. Pull request CI is not changed for
+   a release's sake.
+5. **Uses no credential of its own.** Every ref and tag is written with the workflow's `github.token`. A release
+   workflow adds no token, deploy key or App for tagging.
+6. **Publishes steps that can run again.** Re-running failed jobs, or dispatching the same version again from the same
    commit, must not fail on what an earlier attempt already published.
-5. **Tags last.** One final job, needing every publishing job, runs `release-tag` and then creates the GitHub release.
+7. **Tags last.** One final job, needing every publishing job, runs `release-tag` and then creates the GitHub release.
    Nothing else creates the tag.
 
 ```yaml
@@ -47,19 +56,35 @@ concurrency:
 jobs:
   preflight:
     runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      actions: read # to look up checks that already passed
     outputs:
       version: ${{ steps.check.outputs.version }}
       sha: ${{ steps.check.outputs.sha }}
       prerelease: ${{ steps.check.outputs.prerelease }}
+      verified: ${{ steps.check.outputs.verified }}
     steps:
       - id: check
         uses: MaudeCode/.github/actions/release-preflight@<full commit SHA>
         with:
           tag: ${{ inputs.tag }}
           sha: ${{ inputs.sha }}
+          checks: |
+            ci.yml: Checks
+
+  # Runs only when CI has not already passed on this commit.
+  verify:
+    needs: preflight
+    if: needs.preflight.outputs.verified != 'true'
+    uses: ./.github/workflows/ci.yml
+    with:
+      sha: ${{ needs.preflight.outputs.sha }}
 
   publish:
-    needs: preflight
+    needs: [preflight, verify]
+    # A skipped verify is a pass; a failed one stops the release.
+    if: ${{ !failure() && !cancelled() }}
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
@@ -69,6 +94,7 @@ jobs:
 
   release:
     needs: [preflight, publish]
+    if: ${{ !failure() && !cancelled() }}
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -108,8 +134,9 @@ gh workflow run release.yml --repo OWNER/REPO --ref main -f tag=v1.2.3
 
 ## The actions
 
-- `actions/release-preflight`: inputs `tag`, `sha`; outputs `tag`, `version` (without the `v`), `sha` and `prerelease`
-  (`true` for a version such as `v1.2.0-rc.1`; pass it on, since GitHub does not infer a prerelease from the tag).
+- `actions/release-preflight`: inputs `tag`, `sha`, optional `checks`; outputs `tag`, `version` (without the `v`),
+  `sha`, `prerelease` (`true` for a version such as `v1.2.0-rc.1`; pass it on, since GitHub does not infer a prerelease
+  from the tag), `verified` and `checks`. Looking up checks needs `actions: read`.
 - `actions/release-tag`: inputs `tag`, `sha`, optional `message`. Needs `contents: write`. Creating the tag again at the
   same commit succeeds; at another commit it fails.
 
