@@ -36,7 +36,9 @@ it already uploaded, so a re-run, or the same version dispatched again from the 
 App Store Connect keeps that name on the upload. `ios-build-number` looks for an upload of the version with that name
 and returns its number. This keeps numbers increasing within a version whatever order commits are released in, which
 a number derived from the commit (such as its time) does not when an older commit ships after a newer one in the same
-version. A failed upload's number is not reused.
+version. A failed upload's number is not reused. Builds of one commit that differ, such as a Nightly and a production
+build that stamp different identities into the app, pass different `variant`s to both actions (the IPA is then named
+`<commit SHA>-<variant>.ipa`), so neither takes the other's upload for its own.
 
 It also fails before the archive when App Store Connect would refuse the upload anyway: when an App Store version at
 or above this version has been approved, the version's TestFlight train is closed.
@@ -49,6 +51,7 @@ cannot pick the same number.
 | `bundle-id` | The app's bundle identifier. |
 | `version` | The marketing version, such as `1.2.3`. |
 | `commit` | The full SHA of the commit being built. Empty for the checked-out `HEAD`. |
+| `variant` | Optional. Keeps apart builds of one commit that differ; lowercase letters, digits and hyphens. Give `ios-publish` the same. |
 | `app-store-connect-key-id`, `app-store-connect-issuer-id`, `app-store-connect-private-key` | The App Store Connect API key. |
 
 | Output | |
@@ -111,6 +114,7 @@ resumed. Leave `upload` off to prove signing on a pull request or a dry run with
 | `version` | The marketing version the IPA must carry. |
 | `build-number` | The build number the IPA must carry. |
 | `commit` | The `commit` output of `ios-build-number`. Needed with `upload`. |
+| `variant` | The `variant` given to `ios-build-number`, if any. |
 | `upload` | `true` uploads to TestFlight. Default `false`. |
 | `whats-new` | Optional en-US "What to Test" text for the build. |
 | `app-store-connect-key-id`, `app-store-connect-issuer-id`, `app-store-connect-private-key` | The App Store Connect API key. Needed with `upload`. |

@@ -239,6 +239,12 @@ test("the build number follows the highest App Store Connect holds for the versi
     files: { mine: [{ attributes: { fileName: `${COMMIT}.ipa` } }], theirs: [{ attributes: { fileName: `${OTHER}.ipa` } }] } });
   assert.deepEqual(await ask(earlier), { number: "5", uploaded: true }, "a re-run gets the number this commit uploaded");
   assert.deepEqual(await ask(earlier, "1.2.0", "e".repeat(40)), { number: "7", uploaded: false });
+  // The same commit built as another variant is another build.
+  assert.deepEqual(await ios.buildNumber(earlier.api, { bundleId: APP, version: "1.2.0", commit: COMMIT, variant: "nightly" }), { number: "7", uploaded: false });
+  const nightly = testflight({ builds: [build("1.2.0", "5")], uploads: [upload("n", "1.2.0", "5")], files: { n: [{ attributes: { fileName: `${COMMIT}-nightly.ipa` } }] } });
+  assert.deepEqual(await ios.buildNumber(nightly.api, { bundleId: APP, version: "1.2.0", commit: COMMIT, variant: "nightly" }), { number: "5", uploaded: true });
+  assert.deepEqual(await ask(nightly), { number: "6", uploaded: false }, "a production build does not take the Nightly's upload");
+  await assert.rejects(ios.buildNumber(nightly.api, { bundleId: APP, version: "1.2.0", commit: COMMIT, variant: "Night ly" }), /not a variant/);
   const failed = testflight({ uploads: [upload("mine", "1.2.0", "5", "FAILED")], files: { mine: [{ attributes: { fileName: `${COMMIT}.ipa` } }] } });
   assert.deepEqual(await ask(failed), { number: "6", uploaded: false }, "a failed upload's number is not reused");
 
@@ -294,6 +300,9 @@ test("uploading sends the IPA once, waits for Apple, and a run again for the sam
   assert.deepEqual(await send(apple, run), { buildId: "build-new", uploaded: true });
   assert.deepEqual(apple.writes, ["POST /v1/buildUploads", "POST /v1/buildUploadFiles", "PATCH /v1/buildUploadFiles/file", "POST /v1/betaBuildLocalizations"]);
   assert.equal(apple.store.files["upload-0"][0].attributes.fileName, `${COMMIT}.ipa`, "the upload names its commit for ios-build-number");
+  const variant = testflight();
+  await ios.uploadToTestFlight(variant.api, runner(), { ipa, bundleId: APP, version: "1.2.0", buildNumber: "7", commit: COMMIT, variant: "nightly", attempts: 5, delay: 0 });
+  assert.equal(variant.store.files["upload-0"][0].attributes.fileName, `${COMMIT}-nightly.ipa`);
   assert.deepEqual(run.calls, ["PUT https://upload.example/a 4", "PUT https://upload.example/b 16"]);
   assert.deepEqual(apple.store.localizations.map((row) => row.attributes), [{ locale: "en-US", whatsNew: "Fixes" }]);
   assert.deepEqual(await ios.buildNumber(apple.api, { bundleId: APP, version: "1.2.0", commit: COMMIT }), { number: "7", uploaded: true });

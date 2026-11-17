@@ -10,6 +10,9 @@ inputs:
   commit:
     description: The full SHA of the commit being built. Empty for the checked-out HEAD.
     default: ""
+  variant:
+    description: Keeps apart builds of one commit that differ, such as a Nightly and a production build. Lowercase letters, digits and hyphens; give ios-publish the same.
+    default: ""
   app-store-connect-key-id:
     description: The App Store Connect API key's identifier.
     required: true
