@@ -1,0 +1,25 @@
+name: Tag probe
+
+# Temporary: can a run tag its own commit after main's workflow files have changed underneath it?
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  probe:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - run: sleep 75
+      - name: Tag this run's own commit through the API
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          echo "run commit $GITHUB_SHA, main now $(git ls-remote origin refs/heads/main | cut -f1)"
+          gh api -X POST "repos/$GITHUB_REPOSITORY/git/refs" -f ref=refs/tags/probe-own-api -f sha="$GITHUB_SHA" --jq .ref || echo "API REFUSED"
+      - name: Tag this run's own commit through git push
+        run: git push origin "$GITHUB_SHA:refs/tags/probe-own-push" 2>&1 || echo "PUSH REFUSED"
