@@ -1,11 +1,11 @@
 name: Release preflight
-description: Refuse a release that is not a dispatch on the default branch, of the expected commit, under an unused later version.
+description: Refuse a release that is not a dispatch on the default branch, of a commit on it after the last release, under an unused later version.
 inputs:
   tag:
     description: The version to release, vX.Y.Z with an optional prerelease.
     required: true
   sha:
-    description: The full commit SHA to release. It must be the commit this run is on. Empty releases that commit.
+    description: The full commit SHA to release, on the default branch after the last release. Empty releases the commit this run is on.
     default: ""
   token:
     description: Token that can read the repository.

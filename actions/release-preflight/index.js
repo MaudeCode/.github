@@ -1,6 +1,6 @@
 "use strict";
 const { appendFileSync } = require("node:fs");
-const { github, refusal, run, versionTags } = require("../../lib/release.js");
+const { earlierCommitRefusal, github, latestVersion, refusal, run, versionTags } = require("../../lib/release.js");
 
 run(async () => {
   const env = process.env;
@@ -8,12 +8,12 @@ run(async () => {
   const repository = await api("GET", "");
   if (repository.status !== 200) throw new Error(`Reading the repository failed: HTTP ${repository.status}`);
   const [tag, given] = [env.INPUT_TAG.trim(), (env.INPUT_SHA ?? "").trim()];
-  const why = refusal({
-    event: env.GITHUB_EVENT_NAME, ref: env.GITHUB_REF, defaultBranch: repository.data.default_branch,
-    runSha: env.GITHUB_SHA, sha: given, tag, tags: await versionTags(api),
-  });
+  const [defaultBranch, runSha, tags] = [repository.data.default_branch, env.GITHUB_SHA, await versionTags(api)];
+  const sha = given || runSha;
+  const why =
+    refusal({ event: env.GITHUB_EVENT_NAME, ref: env.GITHUB_REF, defaultBranch, runSha, sha: given, tag, tags }) ??
+    (sha === runSha ? null : await earlierCommitRefusal(api, { sha, runSha, defaultBranch, latest: latestVersion(tags) }));
   if (why) throw new Error(why);
-  const sha = given || env.GITHUB_SHA;
   // GitHub does not infer a prerelease from the tag; the release step passes this on.
   appendFileSync(env.GITHUB_OUTPUT, `tag=${tag}\nversion=${tag.slice(1)}\nsha=${sha}\nprerelease=${tag.includes("-")}\n`);
   console.log(`Releasing ${tag} from ${sha}.`);
