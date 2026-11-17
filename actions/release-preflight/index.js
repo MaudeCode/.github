@@ -13,6 +13,7 @@ run(async () => {
     runSha: env.GITHUB_SHA, sha, tag, tags: await versionTags(api),
   });
   if (why) throw new Error(why);
-  appendFileSync(env.GITHUB_OUTPUT, `tag=${tag}\nversion=${tag.slice(1)}\nsha=${sha}\n`);
+  // GitHub does not infer a prerelease from the tag; the release step passes this on.
+  appendFileSync(env.GITHUB_OUTPUT, `tag=${tag}\nversion=${tag.slice(1)}\nsha=${sha}\nprerelease=${tag.includes("-")}\n`);
   console.log(`Releasing ${tag} from ${sha}.`);
 });

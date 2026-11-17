@@ -17,6 +17,8 @@ outputs:
     description: The version without its v, such as 1.2.3.
   sha:
     description: The commit to release.
+  prerelease:
+    description: "true for a prerelease such as v1.2.0-rc.1, otherwise false."
 runs:
   using: node24
   main: index.js

@@ -44,6 +44,7 @@ jobs:
     runs-on: ubuntu-24.04
     outputs:
       version: ${{ steps.check.outputs.version }}
+      prerelease: ${{ steps.check.outputs.prerelease }}
     steps:
       - id: check
         uses: MaudeCode/.github/actions/release-preflight@<full commit SHA>
@@ -72,7 +73,10 @@ jobs:
           sha: ${{ inputs.sha }}
       - env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "${{ inputs.tag }}" --repo "$GITHUB_REPOSITORY" --verify-tag --generate-notes
+          PRERELEASE: ${{ needs.preflight.outputs.prerelease }}
+        run: |
+          gh release create "${{ inputs.tag }}" --repo "$GITHUB_REPOSITORY" --verify-tag --generate-notes \
+            $([[ "$PRERELEASE" == true ]] && echo --prerelease)
 ```
 
 Pin both actions to a full commit SHA of this repository.
@@ -96,7 +100,8 @@ gh workflow run release.yml --repo OWNER/REPO --ref main -f tag=v1.2.3 -f sha="$
 
 ## The actions
 
-- `actions/release-preflight`: inputs `tag`, `sha`; outputs `tag`, `version` (without the `v`), `sha`.
+- `actions/release-preflight`: inputs `tag`, `sha`; outputs `tag`, `version` (without the `v`), `sha` and `prerelease`
+  (`true` for a version such as `v1.2.0-rc.1`; pass it on, since GitHub does not infer a prerelease from the tag).
 - `actions/release-tag`: inputs `tag`, `sha`, optional `message`. Needs `contents: write`. Creating the tag again at the
   same commit succeeds; at another commit it fails.
 
