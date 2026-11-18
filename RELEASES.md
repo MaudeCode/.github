@@ -32,9 +32,16 @@ copy the workflow below, name its CI's gate job in `checks`, and release its fir
    a release's sake.
 5. **Uses no credential of its own.** Every ref and tag is written with the workflow's `github.token`. A release
    workflow adds no token, deploy key or App for tagging.
-6. **Publishes steps that can run again.** Re-running failed jobs, or dispatching the same version again from the same
+6. **Holds workflow changes while it runs.** GitHub refuses a workflow's own token when it tags a commit whose workflow
+   files differ from the default branch's, so a workflow change that merges during a release leaves it published and
+   untagged. The `release-freeze` action prevents that with a commit status of the same name. The release's first job
+   runs it with `mode: start`, which fails that status on every open pull request that changes a workflow file; a
+   last job with `if: always()` runs `mode: end`, which passes it again however the release ended. CI runs it on every
+   pull request with `mode: pull-request`, so one opened or pushed mid-release is caught, and every pull request
+   carries the status. List `release-freeze` as a required status check on the default branch.
+7. **Publishes steps that can run again.** Re-running failed jobs, or dispatching the same version again from the same
    commit, must not fail on what an earlier attempt already published.
-7. **Tags last.** One final job, needing every publishing job, runs `release-tag` and then creates the GitHub release.
+8. **Tags last.** One final job, needing every publishing job, runs `release-tag` and then creates the GitHub release.
    Nothing else creates the tag.
 
 ```yaml
@@ -74,6 +81,14 @@ jobs:
           checks: |
             ci.yml: Checks
 
+  freeze:
+    needs: preflight
+    runs-on: ubuntu-24.04
+    permissions: { statuses: write, pull-requests: read, actions: read }
+    steps:
+      - uses: MaudeCode/.github/actions/release-freeze@<full commit SHA>
+        with: { mode: start }
+
   # Runs only when CI has not already passed on this commit.
   verify:
     needs: preflight
@@ -112,7 +127,32 @@ jobs:
             $([[ "$PRERELEASE" == true ]] && echo --prerelease)
 ```
 
-Pin both actions to a full commit SHA of this repository.
+The release's last job, and CI's job for pull requests:
+
+```yaml
+  # In release.yml: after everything else, whatever happened.
+  thaw:
+    needs: [freeze, release]
+    if: always()
+    runs-on: ubuntu-24.04
+    permissions: { statuses: write, pull-requests: read, actions: read }
+    steps:
+      - uses: MaudeCode/.github/actions/release-freeze@<full commit SHA>
+        with: { mode: end }
+
+  # In ci.yml: on every pull request.
+  release-freeze:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    permissions: { statuses: write, pull-requests: read, actions: read }
+    steps:
+      - uses: MaudeCode/.github/actions/release-freeze@<full commit SHA>
+        with: { mode: pull-request }
+```
+
+A release workflow not named `release.yml` passes its file name as `workflow` to all three.
+
+Pin every action to a full commit SHA of this repository.
 
 ## Starting a release
 
@@ -128,7 +168,8 @@ gh workflow run release.yml --repo OWNER/REPO --ref main -f tag=v1.2.3
 
 - **Before anything published** (a failing test or build): fix it, then release the same version from the new commit.
 - **A flaky step:** re-run the failed jobs of the same run.
-- **The tag step is refused (HTTP 403):** a workflow file changed on the default branch while the release ran.
+- **The tag step is refused (HTTP 403):** a workflow file changed on the default branch while the release ran, which
+  `release-freeze` exists to prevent (a direct push, or a merge made over a failing status, still can).
   Everything has published; the step prints the `git tag` and `git push` commands to finish it by hand.
 - **After something published under that version from a commit that has since changed:** registries do not take a
   version twice, so release the next version.
@@ -141,7 +182,11 @@ gh workflow run release.yml --repo OWNER/REPO --ref main -f tag=v1.2.3
 - `actions/release-tag`: inputs `tag`, `sha`, optional `message`. Needs `contents: write`. Creating the tag again at the
   same commit succeeds; at another commit it fails.
 
-Both run on the runner's own Node and depend on nothing else. `node --test` runs their tests.
+- `actions/release-freeze`: inputs `mode` (`pull-request`, `start` or `end`), optional `workflow` (the release workflow's
+  file name, `release.yml` by default); outputs `frozen` and `thawed`, the pull request numbers set each way. Needs
+  `statuses: write`, `pull-requests: read` and `actions: read`.
+
+All run on the runner's own Node and depend on nothing else. `node --test` runs their tests.
 
 An iOS app's publishing job signs, numbers and uploads to TestFlight through `ios-signing`, `ios-build-number` and
 `ios-publish`; see [IOS.md](IOS.md). Re-running it for the same version and commit uploads nothing twice.

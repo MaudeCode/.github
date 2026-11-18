@@ -1,7 +1,7 @@
 "use strict";
 const assert = require("node:assert/strict");
 const { test } = require("node:test");
-const { compareVersions, createTag, earlierCommitRefusal, parseChecks, parseVersion, passedChecks, refusal, versionTags } = require("../lib/release.js");
+const { compareVersions, createTag, earlierCommitRefusal, freeze, parseChecks, parseVersion, passedChecks, refusal, versionTags } = require("../lib/release.js");
 
 const SHA = "a".repeat(40);
 const OTHER = "b".repeat(40);
@@ -147,4 +147,44 @@ test("a check counts as passed only when its job succeeded in the workflow's pus
   assert.equal(await suite("relay / *"), true);
   await assert.rejects(passedChecks(api, { sha: SHA, checks: [{ workflow: "missing.yml", job: "Checks" }] }), /missing\.yml is not a workflow/);
   assert.throws(() => parseChecks("Checks"), /not a check such as/);
+});
+
+test("a pull request that changes a workflow file is frozen while a release runs, and thawed when the last one ends", async () => {
+  /** Open pull requests by number, each with the files it changes, and the release runs going on, by id. */
+  const repository = (pulls, releases) => {
+    const statuses = {};
+    const api = async (method, path, body) => {
+      const files = /^\/pulls\/(\d+)\/files\?per_page=100$/.exec(path);
+      if (files) return { status: 200, data: pulls[files[1]].map((filename) => ({ filename })) };
+      if (path === "/pulls?state=open&per_page=100") return { status: 200, data: Object.keys(pulls).map((number) => ({ number: Number(number), head: { sha: `sha${number}` } })) };
+      const runs = /^\/actions\/workflows\/release\.yml\/runs\?event=workflow_dispatch&branch=main&status=(\w+)&per_page=20$/.exec(path);
+      if (runs) return { status: 200, data: { workflow_runs: (releases[runs[1]] ?? []).map((id) => ({ id })) } };
+      const status = /^\/statuses\/(\w+)$/.exec(path);
+      if (method === "POST" && status && body.context === "release-freeze") return (statuses[status[1]] = body.state), { status: 201, data: {} };
+      throw new Error(`unexpected ${method} ${path}`);
+    };
+    return { api, statuses };
+  };
+  const pulls = { 1: ["src/app.ts"], 2: ["src/app.ts", ".github/workflows/ci.yml"], 3: ["docs/a.md"] };
+  const on = { workflow: "release.yml", branch: "main", runId: "70" };
+
+  // A release starting freezes only what changes a workflow file; ending thaws it, whatever the release's result.
+  const quiet = repository(pulls, {});
+  assert.deepEqual(await freeze(quiet.api, { ...on, mode: "start" }), { frozen: [2], thawed: [] });
+  assert.deepEqual(quiet.statuses, { sha2: "failure" });
+  assert.deepEqual(await freeze(quiet.api, { ...on, mode: "end" }), { frozen: [], thawed: [2] });
+  assert.deepEqual(quiet.statuses, { sha2: "success" });
+  // This run still counts as going on while its own last job runs; another release keeps the freeze.
+  assert.deepEqual(await freeze(repository(pulls, { in_progress: [70] }).api, { ...on, mode: "end" }), { frozen: [], thawed: [2] });
+  assert.deepEqual(await freeze(repository(pulls, { in_progress: [70], queued: [71] }).api, { ...on, mode: "end" }), { frozen: [2], thawed: [] });
+
+  // A push to a pull request sets its own status, so one opened or changed mid-release is caught too.
+  const pushed = (number, releases) => freeze(repository(pulls, releases).api, { ...on, mode: "pull-request", pull: { number, sha: `sha${number}` } });
+  assert.deepEqual(await pushed(2, { queued: [71] }), { frozen: [2], thawed: [] });
+  assert.deepEqual(await pushed(2, {}), { frozen: [], thawed: [2] }, "no release is running");
+  assert.deepEqual(await pushed(1, { in_progress: [71] }), { frozen: [], thawed: [1] }, "it changes no workflow file");
+  // A renamed workflow file counts by its old name too.
+  const renamed = repository({ 4: [] }, { in_progress: [71] });
+  const withRename = async (method, path, body) => (path.startsWith("/pulls/4/files") ? { status: 200, data: [{ filename: "old.yml", previous_filename: ".github/workflows/old.yml" }] } : renamed.api(method, path, body));
+  assert.deepEqual(await freeze(withRename, { ...on, mode: "pull-request", pull: { number: 4, sha: "sha4" } }), { frozen: [4], thawed: [] });
 });
