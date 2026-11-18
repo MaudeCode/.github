@@ -34,11 +34,14 @@ copy the workflow below, name its CI's gate job in `checks`, and release its fir
    workflow adds no token, deploy key or App for tagging.
 6. **Holds workflow changes while it runs.** GitHub refuses a workflow's own token when it tags a commit whose workflow
    files differ from the default branch's, so a workflow change that merges during a release leaves it published and
-   untagged. The `release-freeze` action prevents that with a commit status of the same name. The release's first job
-   runs it with `mode: start`, which fails that status on every open pull request that changes a workflow file; a
-   last job with `if: always()` runs `mode: end`, which passes it again however the release ended. CI runs it on every
-   pull request with `mode: pull-request`, so one opened or pushed mid-release is caught, and every pull request
-   carries the status. List `release-freeze` as a required status check on the default branch.
+   untagged. The `release-freeze` action prevents that with a commit status of the same name. A job right after
+   preflight runs it with `mode: start`, which fails that status on every open pull request that changes a workflow
+   file, and every publishing job needs that job: a release that could not set the freeze publishes nothing. A last
+   job with `if: always()` runs `mode: end`, which passes the status again however the release ended. A small workflow
+   of its own, on `pull_request_target`, runs `mode: pull-request` for every pull request, so one opened or pushed
+   mid-release is caught and every pull request carries the status. It is `pull_request_target` because a fork's or
+   Dependabot's `pull_request` run gets a read-only token and could not post a status; it checks out nothing, so it
+   never runs the pull request's code. List `release-freeze` as a required status check on the default branch.
 7. **Publishes steps that can run again.** Re-running failed jobs, or dispatching the same version again from the same
    commit, must not fail on what an earlier attempt already published.
 8. **Tags last.** One final job, needing every publishing job, runs `release-tag` and then creates the GitHub release.
@@ -98,7 +101,7 @@ jobs:
       sha: ${{ needs.preflight.outputs.sha }}
 
   publish:
-    needs: [preflight, verify]
+    needs: [preflight, freeze, verify]
     # A skipped verify is a pass; a failed one stops the release.
     if: ${{ !failure() && !cancelled() }}
     runs-on: ubuntu-24.04
@@ -127,7 +130,7 @@ jobs:
             $([[ "$PRERELEASE" == true ]] && echo --prerelease)
 ```
 
-The release's last job, and CI's job for pull requests:
+The release's last job:
 
 ```yaml
   # In release.yml: after everything else, whatever happened.
@@ -139,10 +142,23 @@ The release's last job, and CI's job for pull requests:
     steps:
       - uses: MaudeCode/.github/actions/release-freeze@<full commit SHA>
         with: { mode: end }
+```
 
-  # In ci.yml: on every pull request.
-  release-freeze:
-    if: github.event_name == 'pull_request'
+And `.github/workflows/release-freeze.yml`, for pull requests:
+
+```yaml
+name: Release freeze
+
+# pull_request_target, so pull requests from forks and Dependabot get the status too. Safe because nothing is checked
+# out: the action reads the pull request's file list through the API and never runs its code. Keep it that way.
+on:
+  pull_request_target:
+    types: [opened, reopened, synchronize]
+
+permissions: {}
+
+jobs:
+  status:
     runs-on: ubuntu-24.04
     permissions: { statuses: write, pull-requests: read, actions: read }
     steps:
