@@ -3,7 +3,7 @@ description: Keep pull requests that change a workflow file from merging while a
 inputs:
   mode:
     description: >-
-      "pull-request" on a pull request's push sets that pull request's status. "start" as a release's first job
+      "pull-request" on a pull request's push (a pull_request_target workflow that checks out nothing) sets that pull request's status. "start" as a release's first job
       freezes the open pull requests that change a workflow file. "end" as its last job, with if always(), thaws them.
     required: true
   workflow:

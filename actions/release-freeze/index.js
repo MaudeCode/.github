@@ -11,7 +11,7 @@ run(async () => {
   if (repository.status !== 200) throw new Error(`Reading the repository failed: HTTP ${repository.status}`);
   const event = JSON.parse(readFileSync(env.GITHUB_EVENT_PATH, "utf8"));
   const pull = event.pull_request && { number: event.pull_request.number, sha: event.pull_request.head.sha };
-  if (mode === "pull-request" && !pull) throw new Error('mode "pull-request" runs on a pull_request event.');
+  if (mode === "pull-request" && !pull) throw new Error('mode "pull-request" runs on a pull_request_target or pull_request event.');
   const result = await freeze(api, { mode, workflow: env.INPUT_WORKFLOW, branch: repository.data.default_branch, runId: env.GITHUB_RUN_ID, pull });
   appendFileSync(env.GITHUB_OUTPUT, `frozen=${JSON.stringify(result.frozen)}\nthawed=${JSON.stringify(result.thawed)}\n`);
   console.log(`Frozen: ${result.frozen.join(", ") || "none"}. Thawed: ${result.thawed.join(", ") || "none"}.`);
