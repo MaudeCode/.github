@@ -4,6 +4,7 @@
       "paths": [
         ""
       ],
+      "multiline": true,
       "patterns": [
         "\\bTask\\.sleep\\(",
         "\\bThread\\.sleep\\(",
@@ -19,6 +20,7 @@
       "paths": [
         ""
       ],
+      "multiline": true,
       "patterns": [
         "\\bDate\\.now\\(\\)\\s*-",
         "\\bperformance\\.now\\(\\)\\s*-",
@@ -33,6 +35,7 @@
       "paths": [
         ""
       ],
+      "multiline": true,
       "patterns": [
         "\\bspyOn\\(\\s*Date\\s*,\\s*['\"]now['\"]",
         "\\bDate\\.now\\s*=[^=]"
@@ -43,6 +46,7 @@
       "paths": [
         ""
       ],
+      "multiline": true,
       "patterns": [
         "\\.configure\\(\\s*\\{[^}]*\\bretries\\b",
         "\\bmark\\.flaky\\b",
@@ -55,6 +59,7 @@
       "paths": [
         ""
       ],
+      "multiline": true,
       "excludeFilePattern": "^(?!.*(?:vitest|playwright)\\.config\\.ts$)",
       "patterns": [
         "\\bretr(?:y|ies)\\s*:\\s*(?:process\\.env\\b|[1-9])"

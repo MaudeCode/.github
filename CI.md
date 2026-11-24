@@ -240,12 +240,15 @@ own config and baseline. Paths on the command line are relative to the working d
   counts a line only when the pattern is within that many lines of it. `blankPattern` blanks the blocks it matches
   before the scan, so their contents never count and line numbers stay those of the file. `ignoreValues` skips a match
   whose first capture group is listed.
+- A rule with `"multiline": true` matches each pattern against the whole file, so a call split across lines still
+  counts, on the line it starts; `^` and `$` then match at each line. Without it, each line is matched on its own.
 - `extends` names one parent config, by a path relative to this one (`./base.json`) or a package path. The parent's
   rules load first, and a local rule with the same id replaces it; nothing else is inherited.
 - [`rules/test-rules.base.json`](rules/test-rules.base.json) holds the rules every repository's tests follow:
   `clock-sleep`, `clock-elapsed`, `unheld-clock`, `retry` and `retry-config`, with patterns for Swift, TypeScript and
-  Python. Their messages point at the repository's own `docs/testing.md`, which says what to do instead. Rules that
-  name one repository's helpers stay in that repository's config.
+  Python. They are multiline, so `test.describe.configure({` with `retries: 2` on the next line still counts. Their
+  messages point at the repository's own `docs/testing.md`, which says what to do instead. Rules that name one
+  repository's helpers stay in that repository's config.
 
 The baseline holds the instances the tree already has, as `counts` per rule and file, and hand-written `exceptions`:
 
@@ -277,5 +280,6 @@ does not list:
 - `budgetSeconds` is 30 when the config leaves it out.
 - An `overBudget` key is `suite::test`: a JUnit `classname` or an XCTest suite, then the test's name. It matches a
   JUnit case whose name ends with the title after its describe blocks (`outer > title`), and every parameter of a
-  parametrized pytest case (`test_x[a]`). Its value names the ticket that brings the test under the budget.
+  parametrized pytest case (`test_x[a]`). Its value names the ticket that brings the test under the budget; an empty
+  one fails the check.
 - No report, or reports with no test cases, fail: a run that measured nothing proved nothing.

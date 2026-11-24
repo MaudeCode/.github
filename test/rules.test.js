@@ -121,12 +121,15 @@ const LANGUAGES = [
   {
     file: "web/src/wait.test.ts",
     text: [
-      "test.describe.configure({ retries: 2 })",
+      // A call split across lines counts once, on its first line.
+      "test.describe.configure({",
+      "  retries: 2,",
+      "})",
       "vi.spyOn(Date, 'now').mockReturnValue(0)",
       "await page.waitForTimeout(500)",
       "expect(Date.now() - started).toBeLessThan(100)",
     ],
-    hits: { retry: 1, "unheld-clock": 2, "clock-sleep": 3, "clock-elapsed": 4 },
+    hits: { retry: 1, "unheld-clock": 4, "clock-sleep": 5, "clock-elapsed": 6 },
   },
   { file: "web/playwright.config.ts", text: ["export default { retries: process.env.CI ? 2 : 0 }"], hits: { "retry-config": 1 } },
   {

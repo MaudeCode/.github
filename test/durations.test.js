@@ -87,3 +87,9 @@ test("no report, or a report with no test cases, fails", (t) => {
   assert.deepEqual(run(t, {}).err, ["maudecode-ci test-durations: no test report given"]);
   assert.deepEqual(run(t, { "junit.xml": "<testsuites/>" }).err, ["maudecode-ci test-durations: no test cases in junit.xml"]);
 });
+
+test("an overBudget entry without a ticket or reason fails before any test is let through", (t) => {
+  const result = run(t, { "junit.xml": '<testcase classname="s" name="slow" time="90"/>' }, { budget: { overBudget: { "s::slow": " " } } });
+  assert.equal(result.status, 1);
+  assert.deepEqual(result.err, ['maudecode-ci test-durations: overBudget["s::slow"] must name its ticket or reason']);
+});
