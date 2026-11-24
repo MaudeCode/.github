@@ -62,7 +62,8 @@ change that next touches its CI.
 7. **Required checks: `CI Gate` and `release-freeze`.** `CI Gate` needs the router and every suite job, runs with
    `if: always()`, and fails, naming the job, when a job that runs a selected suite did not succeed, when a suite job
    that was not required ended anything but `success` or `skipped`, or when any other job it needs, such as the
-   router, did not succeed. `release-freeze` is [RELEASES.md](RELEASES.md)'s, for a repository that releases.
+   router, did not succeed. It also fails when it does not need every job that runs a selected suite.
+   `release-freeze` is [RELEASES.md](RELEASES.md)'s, for a repository that releases.
 8. **A release names suites, not jobs.** In `release-preflight`'s `checks`, a suite is `ci.yml: <suite> / *`: every
    job whose name starts with `<suite> / `. `ci.yml: CI Gate` names them all: a push compares with the last commit
    CI passed on, so a gate that passed on a push means every suite passes on that commit. See

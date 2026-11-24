@@ -130,7 +130,7 @@ test("the CI gate passes when every required job succeeded and every other suite
     [{ web: { result: "skipped" } }, ["web"], /^web ended skipped/],
     [{ docs: { result: "failure" } }, ["web"], /^docs ended failure\.$/m],
     [{ changes: { result: "failure" } }, "", /^changes ended failure\.$/m],
-    [{}, ["api"], /^api was selected, but the gate needs no job that runs it/],
+    [{}, ["api"], /^api runs api, which this change selected, but the gate does not need it/m],
   ]) assert.match(gate({ needs: { ...needs, ...change }, selected }).join("\n"), failure, JSON.stringify(change));
 });
 
@@ -144,4 +144,7 @@ test("with a jobs map, a job is required when any suite it runs was selected, an
     [{ app: { result: "failure" }, cli: { result: "success" } }, ["cli"], /^app ended failure\.$/m],
     [{ changes: { result: "skipped" } }, ["docs"], /^changes ended skipped; every job the gate needs besides the suites must succeed/],
   ]) assert.match(gate({ needs: { ...needs, ...change }, selected, jobs }).join("\n"), failure, JSON.stringify(change));
+  const split = { web_unit: ["web"], web_e2e: ["web"] };
+  assert.match(gate({ needs: { changes: needs.changes, web_unit: { result: "success" } }, selected: ["web"], jobs: split }).join("\n"), /^web_e2e runs web, which this change selected, but the gate does not need it\.$/m);
+  assert.match(gate({ needs, selected: ["api"], jobs }).join("\n"), /^api was selected, but no job in jobs runs it\.$/m);
 });
