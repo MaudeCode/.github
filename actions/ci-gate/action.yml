@@ -1,0 +1,17 @@
+name: CI gate
+description: Pass when every job that runs a selected suite succeeded, and fail naming each job that did not.
+inputs:
+  needs:
+    description: The gate job's needs as JSON (toJSON(needs)); it needs the router and every suite job.
+    required: true
+  selected:
+    description: The router's suites output, the selected suite names as JSON.
+    required: true
+  jobs:
+    description: >-
+      For jobs that run several suites, a JSON map from each job id to the suites it runs, such as
+      {"web": ["web", "api"], "cli": ["cli"]}. Empty means each suite runs in a job named after it.
+    default: ""
+runs:
+  using: node24
+  main: index.js

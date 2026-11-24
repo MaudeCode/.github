@@ -1,0 +1,8 @@
+{
+  "suites": { "web": { "prePush": ["lint web", "typecheck"] }, "cli": { "prePush": ["lint cli", "typecheck"] }, "docs": {} },
+  "rules": [
+    { "paths": ["web/**"], "suites": ["web"] },
+    { "paths": ["cli/**"], "suites": ["cli"] },
+    { "paths": ["**/*.md"], "suites": ["docs"] }
+  ]
+}

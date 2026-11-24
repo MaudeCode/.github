@@ -1,0 +1,17 @@
+name: CI suites
+description: Select the CI suites a pull request or a push to the default branch reaches, from the repository's suites file.
+inputs:
+  config:
+    description: The suites file, relative to the checkout.
+    default: .github/ci-suites.json
+  token:
+    description: Token that can read this workflow's runs (actions read), for a push's base.
+    default: ${{ github.token }}
+outputs:
+  suites:
+    description: The selected suite names, as JSON. Pass it to ci-gate.
+  base:
+    description: The commit the change was compared with; empty when every suite runs without a diff.
+runs:
+  using: node24
+  main: index.js

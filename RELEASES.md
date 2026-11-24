@@ -5,7 +5,8 @@ default branch; the workflow publishes, and its last job creates the `vX.Y.Z` ta
 so the same version is released again once the cause is fixed.
 
 Every MaudeCode repository that publishes versions releases this way. A new repository adopts it from the start:
-copy the workflow below, name its CI's gate job in `checks`, and release its first version through it.
+copy the workflow below, name its CI's gate job in `checks` ([CI.md](CI.md) sets up that CI), and release its first
+version through it.
 
 ## The contract
 
@@ -25,8 +26,9 @@ copy the workflow below, name its CI's gate job in `checks`, and release its fir
    commit, so release a newer one.
 4. **Verifies by reuse or by running, and waits on nothing else.** The release names the checks it needs in
    preflight's `checks` input, one `workflow.yml: Job name` a line. A job name ending in `*` names a suite: every
-   job whose name starts with what comes before it, such as `ci.yml: web / *`. A check whose job, or every job of
-   its suite, already succeeded in that workflow's push run on the commit is reused; preflight's `verified` output is
+   job whose name starts with what comes before it, such as `ci.yml: web / *`, which is how a repository on
+   [CI.md](CI.md) names a suite; there, `ci.yml: CI Gate` names the gate job. A check whose job, or every job of its
+   suite, already succeeded in that workflow's push run on the commit is reused; preflight's `verified` output is
    `true` when all of them did, `checks` says which, and `runs` links to the run each was read from. The release runs the others itself, in its own jobs. It never waits for another workflow's run
    to finish, and a failure in a job the release does not name does not hold it up. Pull request CI is not changed for
    a release's sake.
