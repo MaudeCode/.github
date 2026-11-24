@@ -51,7 +51,11 @@ change that next touches its CI.
      no base, so a suite that failed runs again on the next push even when that push does not touch it. With no such
      run, every suite runs.
    - A manual run, a schedule, and any other event run every suite.
-4. **Concurrency.** A pull request's first attempt shares a group per pull request and cancels the runs it supersedes.
+4. **Concurrency.** No pull request run waits for another run. A pull request's first attempt gets a group of its own,
+   and its `supersede` job cancels that pull request's older, unfinished runs of the workflow through the Actions API
+   without waiting for them to stop. A `concurrency` group with `cancel-in-progress` would hold the new run in
+   `pending` until the old one stopped, and a cancelled `xcodebuild` job takes minutes to stop. `supersede` needs
+   `actions: write`, is `continue-on-error` because a fork's token cannot cancel, and stays out of `CI Gate`'s `needs`.
    A push to the default branch shares one group per ref and cancels nothing. A re-run or a manual run gets a group of
    its own and cancels nothing.
 5. **Every job is the same kind of job.** A GitHub-hosted runner unless it must reach a private network, a
@@ -94,14 +98,42 @@ permissions:
   contents: read
 
 concurrency:
-  # A pull request's first attempt replaces its older runs, a push to main queues behind the one before it, and a
-  # re-run or a manual run stands alone.
+  # A push to main queues behind the one before it. Every other run stands alone: a pull request's first attempt
+  # cancels the runs it replaces in `supersede`, and never waits for them to stop.
   group: >-
-    ci-${{ github.run_attempt == '1' && (github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number)
-    || github.event_name == 'push' && github.ref) || format('run-{0}-{1}', github.run_id, github.run_attempt) }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' && github.run_attempt == '1' }}
+    ci-${{ github.event_name == 'push' && github.run_attempt == '1' && github.ref
+    || format('run-{0}-{1}', github.run_id, github.run_attempt) }}
+  cancel-in-progress: false
 
 jobs:
+  supersede:
+    name: Supersede
+    if: github.event_name == 'pull_request' && github.run_attempt == 1
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    continue-on-error: true # a fork's token cannot cancel
+    permissions:
+      actions: write
+    steps:
+      - name: Cancel this pull request's older runs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+          BRANCH: ${{ github.head_ref }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          workflow="$(gh api "repos/$REPO/actions/runs/$RUN_ID" --jq .workflow_id)"
+          # The branch can hold URL-significant characters, so it goes as a query field. Another pull request from
+          # the same branch, to another base, keeps its runs.
+          gh api --method GET --paginate "repos/$REPO/actions/workflows/$workflow/runs" \
+            -f event=pull_request -f branch="$BRANCH" -F per_page=100 \
+            --jq ".workflow_runs[] | select(.id < $RUN_ID and .status != \"completed\"
+              and any(.pull_requests[]; .number == $PR)) | .id" |
+            while read -r id; do
+              gh api -X POST "repos/$REPO/actions/runs/$id/cancel" >/dev/null && echo "Cancelled run $id"
+            done
+
   changes:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
