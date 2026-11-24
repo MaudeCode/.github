@@ -1,0 +1,10 @@
+{
+  "name": "@maudecode/ci",
+  "version": "0.0.0",
+  "private": true,
+  "description": "The maudecode-ci command: the CI suite selection and pre-push checks of CI.md.",
+  "engines": { "node": ">=22.5.0" },
+  "bin": { "maudecode-ci": "bin/maudecode-ci.js" },
+  "files": ["bin", "lib", "hooks"],
+  "scripts": { "test": "node --test" }
+}
