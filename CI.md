@@ -204,3 +204,78 @@ skipped. Pass `jobs` when the workflow has jobs besides the router and the suite
 
 The package has no install or build script, so a package manager that blocks dependency scripts installs it as it is.
 All of it runs on Node alone. `node --test` runs its tests.
+
+## Test checks
+
+Two commands hold a repository's tests to the test-audit defect rules. Run both in the CI job of the suite that owns the
+tests: `rules` before the tests, `test-durations` on the reports they wrote.
+
+### `maudecode-ci rules --config <path> [--update]`
+
+A pattern scan with a baseline that only goes down. The same command checks test rules and UI rules; each set has its
+own config and baseline. Paths on the command line are relative to the working directory.
+
+```json
+{
+  "extends": "@maudecode/ci/rules/test-rules.base.json",
+  "root": "..",
+  "roots": ["web/src", "tests"],
+  "filePattern": "\\.(?:test\\.ts|py)$",
+  "excludeFilePattern": "/node_modules/",
+  "baseline": "ci/test-rules-baseline.json",
+  "rules": {
+    "local-helper": {
+      "paths": ["web/src/"],
+      "patterns": ["\\bwaitForIdle\\("],
+      "message": "test-audit ready: wait on the row, not the helper (docs/testing.md)"
+    }
+  }
+}
+```
+
+- `root` is relative to the config, and `roots` and `baseline` to the root. A file is scanned when its path from the
+  root matches `filePattern` and not `excludeFilePattern`.
+- A rule counts every match of each of its `patterns` in files whose path starts with one of its `paths` (`""` is every
+  file), except those under `excludePaths` or matching its own `excludeFilePattern`. `nearby` (`lines` and `pattern`)
+  counts a line only when the pattern is within that many lines of it. `blankPattern` blanks the blocks it matches
+  before the scan, so their contents never count and line numbers stay those of the file. `ignoreValues` skips a match
+  whose first capture group is listed.
+- `extends` names one parent config, by a path relative to this one (`./base.json`) or a package path. The parent's
+  rules load first, and a local rule with the same id replaces it; nothing else is inherited.
+- [`rules/test-rules.base.json`](rules/test-rules.base.json) holds the rules every repository's tests follow:
+  `clock-sleep`, `clock-elapsed`, `unheld-clock`, `retry` and `retry-config`, with patterns for Swift, TypeScript and
+  Python. Their messages point at the repository's own `docs/testing.md`, which says what to do instead. Rules that
+  name one repository's helpers stay in that repository's config.
+
+The baseline holds the instances the tree already has, as `counts` per rule and file, and hand-written `exceptions`:
+
+```json
+{
+  "counts": { "clock-sleep": { "tests/test_poll.py": 2 } },
+  "exceptions": [{ "rule": "retry", "file": "tests/test_net.py", "count": 1, "reason": "DOTGH-9: the proxy drops one connection by design" }]
+}
+```
+
+The check fails a file with more instances than its count plus its exceptions, listing each one with its line, rule and
+message. It also fails a count above the tree, so a fixed instance lowers the baseline in the same change: run
+`--update`, which lowers counts to the tree and never raises one. A new instance is fixed, or gets an `exceptions` entry
+whose `reason` names a ticket or says why it stays; an entry without a reason fails the check.
+
+### `maudecode-ci test-durations --config <path> REPORT...`
+
+A per-test run-time budget. It reads JUnit XML (vitest, Playwright, pytest), `xcrun xcresulttool get test-results tests`
+JSON (`*.json`) and XCTest logs (`swift test` output, `*.log`), and fails every test over the budget that the config
+does not list:
+
+```json
+{
+  "budgetSeconds": 30,
+  "overBudget": { "session.spec.ts::history loads every page": "DOTGH-9: 34 s on main; split per page" }
+}
+```
+
+- `budgetSeconds` is 30 when the config leaves it out.
+- An `overBudget` key is `suite::test`: a JUnit `classname` or an XCTest suite, then the test's name. It matches a
+  JUnit case whose name ends with the title after its describe blocks (`outer > title`), and every parameter of a
+  parametrized pytest case (`test_x[a]`). Its value names the ticket that brings the test under the budget.
+- No report, or reports with no test cases, fail: a run that measured nothing proved nothing.
