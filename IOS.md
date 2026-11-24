@@ -1,5 +1,7 @@
 # iOS: sign, number and publish
 
+Part of the setup formula every MaudeCode repository follows: [REPOSITORIES.md](REPOSITORIES.md).
+
 Every MaudeCode iOS app signs, picks its build number and publishes to TestFlight through three actions in this
 repository. An app's workflow keeps only what is really its own: producing an `.xcarchive`. Everything before and after
 the archive is the same for every app.

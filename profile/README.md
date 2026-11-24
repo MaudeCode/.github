@@ -21,6 +21,8 @@ This organization contains:
 - 🔧 **Utilities** — Scripts and automation helpers
 - 🧪 **Experiments** — New ideas and prototypes
 
+Every repository here is set up by one formula: [REPOSITORIES.md](https://github.com/MaudeCode/.github/blob/main/REPOSITORIES.md).
+
 ## 🏗️ Built With
 
 <div align="center">

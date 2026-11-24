@@ -1,5 +1,7 @@
 # CI: run what the change reaches
 
+Part of the setup formula every MaudeCode repository follows: [REPOSITORIES.md](REPOSITORIES.md).
+
 A pull request or a push runs only the suites its diff reaches. One `CI Gate` job says whether the selected suites
 passed, and is the check branch protection requires. A pre-push hook runs the same selection's fast checks before the
 push leaves the machine. Everything uncertain runs everything: a path no rule names, a diff that cannot be read, a
