@@ -1,5 +1,7 @@
 # Releases: tag last
 
+Part of the setup formula every MaudeCode repository follows: [REPOSITORIES.md](REPOSITORIES.md).
+
 A version tag means the release shipped. A release is started by dispatching the repository's release workflow on its
 default branch; the workflow publishes, and its last job creates the `vX.Y.Z` tag. A release that fails leaves no tag,
 so the same version is released again once the cause is fixed.
