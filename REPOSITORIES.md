@@ -75,7 +75,7 @@ services wait for the owner.
 - **oxlint** lints and **oxfmt** formats, and CI checks both.
 - **One place per version.** Each toolchain version is pinned in one place: Node in `.node-version`, pnpm in
   `packageManager`, every package in the lockfile. An iOS app pins Xcode in one setup action that every iOS job uses,
-  and signs and publishes as [IOS.md](IOS.md) says.
+  and tests, signs and publishes as [IOS.md](IOS.md) says.
 
 A repository on another package manager or runtime moves to this one in a ticket of its own.
 
