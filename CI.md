@@ -42,7 +42,9 @@ change that next touches its CI.
      or `base` are errors that fail the router, naming the key.
 2. **One workflow, three kinds of job.** `.github/workflows/ci.yml` has a router job that runs `ci-suites`, one job
    per suite or group of suites with an `if` on the router's output for it, and `CI Gate`. A suite's jobs are named
-   `<suite> / <what it runs>`, so a release can name them all at once (item 8).
+   `<suite> / <what it runs>`, so a release can name them all at once (item 8). An iOS app's suites follow
+   [IOS.md](IOS.md#unit-tests-and-pr-ci): the iOS suite boots no simulator, and app-hosted tests run in a suite of
+   their own that only their paths, and every release, reach.
 3. **Every change triggers it.** `pull_request`, `push` to the default branch, and `workflow_dispatch`, with no `paths`
    filters: the router decides what runs, and a workflow that does not start cannot report.
    - A pull request runs the suites its diff from the merge base with its base branch reaches.

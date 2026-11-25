@@ -1,8 +1,9 @@
-# iOS: sign, number and publish
+# iOS: test, sign, number and publish
 
 Part of the setup formula every MaudeCode repository follows: [REPOSITORIES.md](REPOSITORIES.md).
 
-Every MaudeCode iOS app signs, picks its build number and publishes to TestFlight through three actions in this
+Every MaudeCode iOS app tests its logic on macOS without a simulator ([Unit tests and PR CI](#unit-tests-and-pr-ci)),
+and signs, picks its build number and publishes to TestFlight through three actions in this
 repository. An app's workflow keeps only what is really its own: producing an `.xcarchive`. Everything before and after
 the archive is the same for every app.
 
@@ -11,6 +12,59 @@ ios-build-number ──► ios-signing ──► (the app's own archive step) �
 ```
 
 Pin each action to a full commit SHA of this repository, as for the release actions in [RELEASES.md](RELEASES.md).
+
+## Unit tests and PR CI
+
+On GitHub's hosted `xcode-27` image a simulator's first boot costs about 7 minutes, wherever in the job it happens.
+So an app's pull request CI boots no simulator: its logic is tested on macOS, and its app is only built.
+
+1. **The logic and its unit tests live in a local Swift package** in the app's repository. The package builds for
+   macOS as well as iOS, and its tests run with `swift test` on macOS, with no simulator. Platform glue such as UIKit,
+   APNs and window anchors is guarded with `#if canImport(UIKit)` or sits behind a small protocol the app implements.
+   - By default the app compiles the package's sources into its own module (XcodeGen `sources`, or the same files in
+     the app target), so the code needs no `public` API. The package only proves those sources build and pass
+     without iOS.
+   - An app that prefers a real module boundary links a package product instead, and marks its API `public`.
+2. **The package build never writes the host's stores.** No `UserDefaults.standard` and no login keychain: under the
+   package build they live in memory, behind one chokepoint that every read and write goes through. A compilation
+   condition set only in the package's `swiftSettings`, never in the app, selects them.
+3. **PR CI's iOS suite boots nothing.** It lints, runs the package's tests with `swift test`, builds the app for the
+   simulator with `xcodebuild build -destination 'generic/platform=iOS Simulator'`, which installs and boots nothing,
+   and runs the repository's static checks. No step boots a simulator.
+4. **App-hosted tests get their own suite, and stay rare.** A test that truly needs the app host or a simulator stays
+   in the app's test target and runs in a suite of its own (Cowtail's `ios-sim`). In `.github/ci-suites.json` that
+   suite's rule lists exactly the paths those tests cover, and sits before the broad app rule, so other app changes
+   select only the iOS suite ([CI.md](CI.md#the-contract), item 1). A routing test enforces it: every path the rule
+   lists selects the suite, every app-hosted test file is in the rule, and a package or view change does not select
+   it. Every release runs the suite, named in `release-preflight`'s `checks` ([RELEASES.md](RELEASES.md)). Move logic
+   into the package rather than adding an app-hosted test.
+
+No UI tests in hosted CI: each launch of the app takes 15 to 27 seconds there. They run locally.
+
+**Evidence.** Cowtail measured where its iOS job's time went (COW-73, MaudeCode/cowtail#63):
+
+| Variant | Build end to first test | Lockdown error | Job |
+|---|---|---|---|
+| baseline (run 45534552887) | 6 min 50 s | "bless service hub" and "timed out after 120 seconds" | 10 min 54 s |
+| `-collect-test-diagnostics never -enablePerformanceTestsDiagnostics NO` | 7 min 18 s | "bless service hub" | 13 min 22 s |
+| early `simctl boot` in the background + flags | 56 s | none | 16 min 38 s: the boot slowed `pnpm/action-setup` to 4 min 20 s and SwiftLint to 2 min 50 s |
+| early boot only | n/a (cancelled) | n/a | `pnpm/action-setup` 4 min 47 s while the simulator booted |
+| early boot + flags + `build-for-testing`/`test-without-building` | n/a (cancelled) | n/a | `pnpm/action-setup` 5 min 41 s, SwiftLint 3 min 54 s |
+
+Booting early only moves the cost onto the steps beside it, so no shared action boots a simulator. Not booting at all
+is what helped: Cowtail moved its logic and 92 of its 94 unit tests into a package whose `swift test` runs in under a
+second, and the 2 tests that need the installed app run only when their paths change, and on every release.
+
+**Reference implementation**, in MaudeCode/cowtail:
+
+- [`.github/workflows/ios-verify.yml`](https://github.com/MaudeCode/cowtail/blob/main/.github/workflows/ios-verify.yml):
+  the iOS suite, rule 3.
+- [`.github/workflows/ios-sim-verify.yml`](https://github.com/MaudeCode/cowtail/blob/main/.github/workflows/ios-sim-verify.yml):
+  the app-hosted suite, rule 4.
+- [`ios/CowtailKit/Package.swift`](https://github.com/MaudeCode/cowtail/blob/main/ios/CowtailKit/Package.swift): the
+  package, rules 1 and 2; its sources' `App/HostStores.swift` is rule 2's chokepoint.
+- [`script/ci/suites.test.ts`](https://github.com/MaudeCode/cowtail/blob/main/script/ci/suites.test.ts): the routing
+  test, rule 4.
 
 ## Secrets
 
