@@ -27,7 +27,10 @@ So an app's pull request CI boots no simulator: its logic is tested on macOS, an
    - An app that prefers a real module boundary links a package product instead, and marks its API `public`.
 2. **The package build never writes the host's stores.** No `UserDefaults.standard` and no login keychain: under the
    package build they live in memory, behind one chokepoint that every read and write goes through. A compilation
-   condition set only in the package's `swiftSettings`, never in the app, selects them.
+   condition in the package's `swiftSettings`, never in the app, selects them. With the default above, the app never
+   builds the package, so the condition can apply to every package build. With a linked product it would also apply
+   when the shipping app builds the package, so limit it to macOS, `.define("<NAME>", .when(platforms: [.macOS]))`,
+   or have the tests inject in-memory stores instead.
 3. **PR CI's iOS suite boots nothing.** It lints, runs the package's tests with `swift test`, builds the app for the
    simulator with `xcodebuild build -destination 'generic/platform=iOS Simulator'`, which installs and boots nothing,
    and runs the repository's static checks. No step boots a simulator.
