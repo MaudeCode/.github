@@ -9,9 +9,10 @@ inputs:
     default: ""
   checks:
     description: >-
-      The checks this release needs, one "workflow.yml: Job name" a line. Each is looked up in that workflow's
-      push run on the commit. A job name ending in * is a suite: every job whose name starts with what precedes
-      the *. Needs actions: read. Empty looks nothing up.
+      The checks this release needs, one "workflow.yml: Job name" a line. Each uses the newest push, workflow_dispatch, or schedule run
+      of that workflow on the default branch at the release commit that ran the check. A job name ending in *
+      matches a suite by prefix. Missing or skipped jobs and suites with skipped matches are ignored when choosing a run.
+      Every matching job must succeed in the deciding run. Needs actions: read. Empty looks nothing up.
     default: ""
   token:
     description: Token that can read the repository.
