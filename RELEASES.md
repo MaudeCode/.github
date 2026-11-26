@@ -29,11 +29,14 @@ version through it.
 4. **Verifies by reuse or by running, and waits on nothing else.** The release names the checks it needs in
    preflight's `checks` input, one `workflow.yml: Job name` a line. A job name ending in `*` names a suite: every
    job whose name starts with what comes before it, such as `ci.yml: web / *`, which is how a repository on
-   [CI.md](CI.md) names a suite; there, `ci.yml: CI Gate` names the gate job. A check whose job, or every job of its
-   suite, already succeeded in that workflow's push run on the commit is reused; preflight's `verified` output is
-   `true` when all of them did, `checks` says which, and `runs` links to the run each was read from. The release runs the others itself, in its own jobs. It never waits for another workflow's run
-   to finish, and a failure in a job the release does not name does not hold it up. Pull request CI is not changed for
-   a release's sake.
+   [CI.md](CI.md) names a suite. For each check, preflight uses the newest push, manual dispatch, or scheduled run of
+   the named workflow on the default branch at the release commit that ran the check. A missing job or a skipped
+   match means the check did not run. For a suite, at least one job must match and none may be skipped. The deciding
+   run must have succeeded on every match to count as passed. A failed, cancelled, or running check in that run makes
+   the release run the check itself. A repository with scheduled full CI can reuse its checks by releasing that
+   run's commit. The `verified` output is true when all named checks passed, `checks` says which passed, and `runs`
+   links each check to its deciding run. The release runs the other checks in its own jobs without waiting for CI.
+   A failure in an unnamed job does not hold the release up. Pull request CI is unchanged.
 5. **Uses no credential of its own.** Every ref and tag is written with the workflow's `github.token`. A release
    workflow adds no token, deploy key or App for tagging.
 6. **Holds workflow changes while it runs.** GitHub refuses a workflow's own token when it tags a commit whose workflow
