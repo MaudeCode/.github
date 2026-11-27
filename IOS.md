@@ -159,8 +159,13 @@ Exports the archive to an IPA and verifies it: the app has the bundle identifier
 under it, the app and every extension carry the version and build number, each embeds an App Store profile for itself
 that has not expired, and `codesign --verify --deep --strict` passes.
 
+The main app’s exported `Info.plist` must include a boolean `ITSAppUsesNonExemptEncryption`. Set the value in the
+app target after reviewing the app and its linked libraries. Use `false` for exempt-only or no encryption and `true`
+for non-exempt encryption. Apps declaring non-exempt encryption may also need Apple-approved documentation.
+[Apple’s declaration guidance](https://developer.apple.com/documentation/bundleresources/information-property-list/itsappusesnonexemptencryption)
+
 When `upload` is `true` it then uploads the IPA to TestFlight through the App Store Connect API, waits until Apple has
-processed it, and confirms the build is listed as valid. A build App Store Connect already holds for this version and
+processed it, and confirms the valid build’s encryption declaration matches the verified IPA. A build App Store Connect already holds for this version and
 build number is success and nothing is uploaded again; an earlier attempt's upload that never finished sending is
 resumed. Leave `upload` off to prove signing on a pull request or a dry run without publishing.
 

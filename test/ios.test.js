@@ -203,7 +203,7 @@ function testflight({ builds = [], uploads = [], files = {}, versions = [], proc
       const [upload] = store.uploads.filter((row) => store.files[row.id]?.[0].id === "file");
       store.files[upload.id][0].attributes.assetDeliveryState.state = "COMPLETE";
       upload.attributes.state.state = "PROCESSING";
-      store.builds.push({ id: "build-new", marketing: upload.attributes.cfBundleShortVersionString, attributes: { version: upload.attributes.cfBundleVersion, processingState: "PROCESSING", expired: false } });
+      store.builds.push({ id: "build-new", marketing: upload.attributes.cfBundleShortVersionString, attributes: { version: upload.attributes.cfBundleVersion, processingState: "PROCESSING", expired: false, usesNonExemptEncryption: false } });
       return {};
     },
     "GET /v1/buildUploads/upload-0": () => {
@@ -227,7 +227,7 @@ function testflight({ builds = [], uploads = [], files = {}, versions = [], proc
 }
 
 const upload = (id, version, number, state = "COMPLETE") => ({ id, attributes: { cfBundleShortVersionString: version, cfBundleVersion: number, platform: "IOS", state: { state } } });
-const build = (version, number) => ({ id: `build-${number}`, marketing: version, attributes: { version: number, processingState: "VALID", expired: false } });
+const build = (version, number) => ({ id: `build-${number}`, marketing: version, attributes: { version: number, processingState: "VALID", expired: false, usesNonExemptEncryption: false } });
 
 test("the build number follows the highest App Store Connect holds for the version, and a commit gets its own upload's number again", async () => {
   const ask = (apple, version = "1.2.0", commit = COMMIT) => ios.buildNumber(apple.api, { bundleId: APP, version, commit });
@@ -260,10 +260,10 @@ function ipaRunner({ bundles, codesign = true }) {
   return runner({
     "unzip -q": (args) => {
       const into = args.at(-1);
-      for (const [where, { id, version = "1.2.0", number = "7", profile = {} }] of Object.entries(bundles)) {
+      for (const [where, { id, version = "1.2.0", number = "7", encryption = "<false/>", profile = {} }] of Object.entries(bundles)) {
         const bundle = path.join(into, "Payload", where);
         fs.mkdirSync(bundle, { recursive: true });
-        fs.writeFileSync(path.join(bundle, "Info.plist"), `<plist><dict><key>CFBundleIdentifier</key><string>${id}</string><key>CFBundleShortVersionString</key><string>${version}</string><key>CFBundleVersion</key><string>${number}</string></dict></plist>`);
+        fs.writeFileSync(path.join(bundle, "Info.plist"), `<plist><dict>${encryption ? `<key>ITSAppUsesNonExemptEncryption</key>${encryption}` : ""}<key>CFBundleIdentifier</key><string>${id}</string><key>CFBundleShortVersionString</key><string>${version}</string><key>CFBundleVersion</key><string>${number}</string></dict></plist>`);
         if (profile) fs.writeFileSync(path.join(bundle, "embedded.mobileprovision"), profileXml({ appId: `${profile.prefix ?? TEAM}.${id}`, ...profile }));
       }
       return "";
@@ -275,9 +275,12 @@ function ipaRunner({ bundles, codesign = true }) {
 test("an IPA is verified: identifiers, version and build number in every bundle, App Store profiles, and the signature", () => {
   const share = "App.app/PlugIns/Share.appex";
   const check = (bundles, options) => ios.verifyIpa(ipaRunner({ bundles, ...options }), { ipa: "/tmp/App.ipa", bundleId: APP, version: "1.2.0", buildNumber: "7", directory: path.join(temporary(), "ipa") });
-  check({ "App.app": { id: APP }, [share]: { id: `${APP}.share` } });
+  assert.equal(check({ "App.app": { id: APP }, [share]: { id: `${APP}.share`, encryption: "" } }), false);
+  assert.equal(check({ "App.app": { id: APP, encryption: "<true/>" } }), true);
   check({ "App.app": { id: APP, profile: { prefix: "LEGACY1234" } } });
   for (const [bundles, options, problem] of [
+    [{ "App.app": { id: APP, encryption: "" }, [share]: { id: `${APP}.share` } }, {}, /ITSAppUsesNonExemptEncryption/],
+    [{ "App.app": { id: APP, encryption: "<string>NO</string>" } }, {}, /ITSAppUsesNonExemptEncryption/],
     [{ "App.app": { id: "dev.example.wrong" } }, {}, /App\.app has bundle identifier dev\.example\.wrong, expected dev\.example\.app/],
     [{ "App.app": { id: APP }, [share]: { id: "dev.other.share" } }, {}, /Share\.appex has bundle identifier dev\.other\.share/],
     [{ "App.app": { id: APP }, [share]: { id: `${APP}.share`, number: "6" } }, {}, /Share\.appex is 1\.2\.0 \(6\), expected 1\.2\.0 \(7\)/],
@@ -293,7 +296,7 @@ test("an IPA is verified: identifiers, version and build number in every bundle,
 test("uploading sends the IPA once, waits for Apple, and a run again for the same version and number uploads nothing", async () => {
   const ipa = path.join(temporary(), "App.ipa");
   fs.writeFileSync(ipa, "signed release bytes");
-  const send = (apple, run = runner(), whatsNew = "Fixes") => ios.uploadToTestFlight(apple.api, run, { ipa, bundleId: APP, version: "1.2.0", buildNumber: "7", commit: COMMIT, whatsNew, attempts: 5, delay: 0 });
+  const send = (apple, run = runner(), whatsNew = "Fixes") => ios.uploadToTestFlight(apple.api, run, { ipa, bundleId: APP, version: "1.2.0", buildNumber: "7", commit: COMMIT, usesNonExemptEncryption: false, whatsNew, attempts: 5, delay: 0 });
 
   const apple = testflight({ builds: [build("1.1.0", "7")] });
   const run = runner();
@@ -322,6 +325,11 @@ test("uploading sends the IPA once, waits for Apple, and a run again for the sam
   const elsewhere = testflight({ builds: [build("1.2.0", "7")] });
   assert.deepEqual(await send(elsewhere, runner(), ""), { buildId: "build-7", uploaded: false });
   assert.deepEqual(elsewhere.writes, []);
+  const processed = build("1.2.0", "7");
+  for (const value of [null, true]) {
+    processed.attributes.usesNonExemptEncryption = value;
+    await assert.rejects(send(testflight({ builds: [processed] })), /encryption declaration/);
+  }
 });
 
 test("an upload an earlier attempt left unsent is resumed with the same IPA and refused with another", async () => {
