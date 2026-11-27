@@ -127,10 +127,10 @@ Sets up signing for this job:
    Xcode, and puts it first on the search list;
 2. fails unless it can sign as Apple Distribution, by signing a scratch file with the imported identity;
 3. reads the team identifier from the certificate;
-4. downloads the active App Store profiles for each bundle identifier from App Store Connect and keeps, for each, the
-   one that can sign this build: right bundle identifier, right team, includes the imported certificate, not expired. A
-   bundle identifier can have several App Store profiles, one per certificate; when none fits, it fails naming the
-   bundle identifier, the certificate's serial number and what is wrong with each profile;
+4. selects the longest-lived active, manually managed App Store profile that matches each bundle ID, team and
+   distribution certificate. If none matches, it creates an App Store profile for that registered bundle ID and the
+   existing CI certificate, then checks the signed contents before installation. The team key needs permission to
+   create profiles for this fallback. Existing compatible profiles require only read access;
 5. installs those profiles, and writes the App Store Connect key file and an `ExportOptions.plist`
    (`app-store-connect`, manual signing, the profile per bundle identifier).
 
