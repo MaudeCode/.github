@@ -34,10 +34,11 @@ const OTHER = "d".repeat(40);
 const temporary = () => fs.mkdtempSync(path.join(os.tmpdir(), "ios-test-"));
 
 /** A decoded provisioning profile as `security cms -D` prints it. */
-function profileXml({ name = "App Store", team = TEAM, prefix = team, appId = `${prefix}.${APP}`, expires = "2027-06-01T00:00:00Z", certificates = [CERTIFICATE], uuid = "UUID-1", extra = "" } = {}) {
+function profileXml({ name = "App Store", team = TEAM, prefix = team, appId = `${prefix}.${APP}`, expires = "2027-06-01T00:00:00Z", certificates = [CERTIFICATE], uuid = "UUID-1", managed = false, extra = "" } = {}) {
   return `<?xml version="1.0" encoding="UTF-8"?>
 <plist version="1.0"><dict>
   <key>Name</key><string>${name}</string>
+  <key>IsXcodeManaged</key><${managed}/>
   <key>UUID</key><string>${uuid}</string>
   <key>TeamIdentifier</key><array><string>${team}</string></array>
   <key>ApplicationIdentifierPrefix</key><array><string>${prefix}</string></array>
@@ -108,7 +109,7 @@ function profileRoutes(profiles) {
     "GET /v1/bundleIds": ({ "filter[identifier]": id }) => [{ id: `bundle:${id}`, attributes: { identifier: id } }, { id: "near", attributes: { identifier: `${id}.near` } }],
     "GET /v1/bundleIds/bundle:dev.example.app/profiles": () => profiles.map((options, i) => ({
       id: `profile-${i}`,
-      attributes: { profileType: options.type ?? "IOS_APP_STORE", profileState: options.state ?? "ACTIVE", profileContent: Buffer.from(profileXml(options)).toString("base64") },
+      attributes: { name: options.name ?? "App Store", profileType: options.type ?? "IOS_APP_STORE", profileState: options.state ?? "ACTIVE", profileContent: Buffer.from(profileXml(options)).toString("base64") },
     })),
   };
 }
@@ -124,7 +125,7 @@ test("signing sets up a job keychain, installs the checked profile, writes the k
   const [temp, home] = [temporary(), temporary()];
   const state = {};
   const run = runner(keychainAnswers);
-  const { api } = appleApi(profileRoutes([{ appId: `${TEAM}.dev.example.other`, uuid: "WRONG" }, { name: "App Store", uuid: "UUID-1" }]));
+  const { api } = appleApi(profileRoutes([{ name: "Managed", managed: true, expires: "2028-01-01T00:00:00Z" }, { appId: `${TEAM}.dev.example.other`, uuid: "WRONG" }, { name: "App Store", uuid: "UUID-1" }]));
   const outputs = await ios.setUpSigning(
     { p12: Buffer.from("p12").toString("base64"), password: "secret", keyId: "KEY123", issuerId: "issuer", privateKey: "-----BEGIN PRIVATE KEY-----\\nabc\\n-----END PRIVATE KEY-----", bundleIds: [APP] },
     { run, api, temp, home, save: (name, value) => { state[name] = value; } },
@@ -148,7 +149,7 @@ test("signing sets up a job keychain, installs the checked profile, writes the k
   assert.ok(!fs.existsSync(state.directory) && installed.every((file) => !fs.existsSync(file)));
 });
 
-test("signing fails without an Apple Distribution identity or a usable profile, and post still removes what it made", async () => {
+test("signing requires a distribution identity and uses its certificate for profile selection", async () => {
   const setUp = (answers, profiles) => {
     const state = {};
     const signing = ios.setUpSigning(
@@ -164,15 +165,38 @@ test("signing fails without an Apple Distribution identity or a usable profile, 
   assert.deepEqual(post.calls, [`security delete-keychain ${unsigned.state.keychain}`]);
   assert.ok(!fs.existsSync(unsigned.state.directory));
 
-  const expired = setUp({}, [{ expires: "2026-01-01T00:00:00Z" }, { type: "IOS_APP_DEVELOPMENT" }]);
-  await assert.rejects(expired.signing, /No usable App Store profile for dev\.example\.app with certificate 391E1E7DE393176\w+\. Profile "App Store" expired/);
   // Two App Store profiles for the bundle identifier, each for another certificate: the one for this certificate signs.
   const two = setUp({}, [{ name: "Other certificate", certificates: [Buffer.from("another certificate")] }, { name: "This certificate" }]);
   assert.deepEqual(JSON.parse((await two.signing).profiles), { [APP]: "This certificate" });
-  await assert.rejects(setUp({}, [{ name: "Other certificate", certificates: [Buffer.from("another certificate")] }]).signing,
-    /No usable App Store profile for dev\.example\.app with certificate 391E1E7DE393176\w+\. Profile "Other certificate" does not include the distribution certificate/);
-  await assert.rejects(setUp({}, []).signing, /has no active App Store profile/);
 });
+
+for (const lostResponse of [false, true]) {
+  test(`signing provisions and reuses a manual profile (${lostResponse ? "lost" : "received"} create response)`, async () => {
+    const rows = [{ name: "Team Store", managed: true }];
+    const routes = profileRoutes(rows);
+    routes["GET /v1/certificates"] = () => [{ id: "distribution", attributes: { certificateContent: CERTIFICATE.toString("base64") } }];
+    routes["POST /v1/profiles"] = (_, request) => {
+      assert.equal(request.attributes.profileType, "IOS_APP_STORE");
+      assert.deepEqual(request.relationships, {
+        bundleId: { data: { type: "bundleIds", id: `bundle:${APP}` } },
+        certificates: { data: [{ type: "certificates", id: "distribution" }] },
+      });
+      rows.push({ name: request.attributes.name, uuid: "CREATED" });
+      if (lostResponse) throw new Error("Connection closed after Apple created the profile");
+      return routes["GET /v1/bundleIds/bundle:dev.example.app/profiles"]().at(-1);
+    };
+    const { api, writes } = appleApi(routes);
+    const sign = () => ios.setUpSigning(
+      { p12: "cDEy", password: "secret", bundleIds: [APP], privateKey: "key" },
+      { run: runner(keychainAnswers), api, temp: temporary(), home: temporary(), save: () => {} },
+    );
+    const first = await sign();
+    assert.equal(rows.length, 2);
+    assert.equal(JSON.parse(first.profiles)[APP], rows[1].name);
+    assert.equal((await sign()).profiles, first.profiles);
+    assert.deepEqual(writes, ["POST /v1/profiles"]);
+  });
+}
 
 /** App Store Connect for one app, its TestFlight builds and the uploads behind them. */
 function testflight({ builds = [], uploads = [], files = {}, versions = [], processing = 1, outcome = "VALID" } = {}) {
